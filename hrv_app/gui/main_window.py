@@ -22,7 +22,8 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._connect_signals()
-
+        self._on_language_changed(0)
+        
     def _build_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
