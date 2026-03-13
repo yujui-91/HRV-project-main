@@ -1,4 +1,3 @@
-import os
 import textwrap
 
 import matplotlib
@@ -11,8 +10,11 @@ from matplotlib.patches import FancyBboxPatch
 from .plotting import create_taichi_plot
 
 
-def _setup_chinese_font():
-    plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei', 'SimHei', 'sans-serif']
+def _setup_font():
+    plt.rcParams['font.sans-serif'] = [
+        'Arial', 'Helvetica',
+        'Microsoft JhengHei', 'SimHei', 'sans-serif',
+    ]
     plt.rcParams['axes.unicode_minus'] = False
 
 
@@ -21,7 +23,7 @@ def generate_report(output_path, patient_info, hrv_results,
     """
     Generate a single-page A4 PDF report with updated layout.
     """
-    _setup_chinese_font()
+    _setup_font()
 
     metrics = hrv_results['metrics']
 
@@ -37,9 +39,9 @@ def generate_report(output_path, patient_info, hrv_results,
     # === Row 0: 標題 ===
     ax_title = fig.add_subplot(gs[0])
     ax_title.axis('off')
-    ax_title.text(0.5, 0.5, '高醫保健科自律神經報告 -- 心律變異分析',
-                  ha='center', va='center', fontsize=16, fontweight='bold')
-    ##
+    ax_title.text(0.5, 0.5, 'KMUH Autonomic Nervous System Report -- HRV Analysis',
+                  ha='center', va='center', fontsize=14, fontweight='bold')
+
     # === Row 1: 病患資訊 (所有資訊放這裡) ===
     ax_info = fig.add_subplot(gs[1])
     ax_info.axis('off')
@@ -48,9 +50,6 @@ def generate_report(output_path, patient_info, hrv_results,
     exam_time = patient_info.get('exam_time', '--')
     birth_date = patient_info.get('birth_date', '--')
 
-    # info_text = (f'Name：{name}              Patient ID：{record_num}\n'
-    #              f'Date of Birth：{birth_date}    Date Received：{exam_time}')
-    
     p_bbox = FancyBboxPatch((0.1, 0.05), 0.8, 0.9,
                         boxstyle="round,pad=0.05",
                         fc="#F8F9F9", ec="#DCDCDC", lw=1.5,
@@ -58,18 +57,18 @@ def generate_report(output_path, patient_info, hrv_results,
                         transform=ax_info.transAxes, clip_on=False)
     ax_info.add_patch(p_bbox)
 
-    # 繪製左半部 (對齊姓名與生日)
-    left_text = f"Name：{name}\nDate of Birth：{birth_date}"
-    ax_info.text(0.2, 0.5, left_text, 
-                ha='left', va='center', 
+    # 繪製左半部
+    left_text = f"Name: {name}\nDate of Birth: {birth_date}"
+    ax_info.text(0.10, 0.5, left_text,
+                ha='left', va='center',
                 fontsize=11, linespacing=2.5,
                 transform=ax_info.transAxes)
 
-    # 繪製右半部 (對齊病歷號與檢查時間)
-    right_text = f"Patient ID：{record_num}\nDate Received：{exam_time}"
-    ax_info.text(0.5, 0.5, right_text, 
-                ha='left', va='center', 
-                fontsize=11,linespacing=2.5, # 增加行距
+    # 繪製右半部 (文字塊置於右半框中央)
+    right_text = f"Patient ID: {record_num}\nDate Received: {exam_time}"
+    ax_info.text(0.53, 0.5, right_text,
+                ha='left', va='center',
+                fontsize=11, linespacing=2.5,
                 transform=ax_info.transAxes)
 
     # === Row 2: 中間區塊 (左：太極圖 | 右：數值指標) ===
@@ -84,40 +83,8 @@ def generate_report(output_path, patient_info, hrv_results,
     lf_nu = metrics.get('LFnu')
     hf_nu = metrics.get('HFnu')
     
-    taichi_fig = create_taichi_plot(lf_hf, lf_nu, hf_nu)
-    tmp_file = output_path + '.taichi.tmp.png'
-    taichi_fig.savefig(tmp_file, dpi=600, bbox_inches='tight', transparent=True)
-    plt.close(taichi_fig)
-    
-    taichi_img = plt.imread(tmp_file)
-    ax_taichi.imshow(taichi_img, aspect='equal', interpolation='lanczos')
-    
-    # # --- 右側：所有數值指標 ---
-    # ax_metrics = fig.add_subplot(gs_middle[0, 1])
-    # ax_metrics.axis('off')
-    
-    # sdnn = metrics.get('HRV_SDNN', '--')
-    # lf = metrics.get('HRV_LF', '--')
-    # hf = metrics.get('HRV_HF', '--')
-    # lf_hf_val = metrics.get('HRV_LF_HF', '--')
-    # dfa = metrics.get('HRV_DFA_alpha1', '--')
+    create_taichi_plot(lf_hf, lf_nu, hf_nu, ax=ax_taichi, lang='en')
 
-    # # 改為垂直排列更符合空間預留
-    # metrics_display = (f'【 HRV 指標數據 】\n\n'
-    #                    f'SDNN: {sdnn}\n'
-    #                    f'LF: {lf}\n'
-    #                    f'HF: {hf}\n'
-    #                    f'LF/HF: {lf_hf_val}\n'
-    #                    f'DFA α1: {dfa}')
-
-    # ax_metrics.text(0.5, 0.5, metrics_display, 
-    #                 ha='center', va='center',
-    #                 fontsize=10, linespacing=2.2,
-    #                 transform=ax_metrics.transAxes,
-    #                 bbox=dict(boxstyle='round,pad=1.2', 
-    #                           facecolor='#F8F9F9', 
-    #                           edgecolor='#DCDCDC', 
-    #                           linewidth=1.5))
     table_data = [
         ['', 'Baseline', 'Stress', 'Recovery'],
         ['HR', metrics.get('HR_mean', '--'), '', ''],
@@ -164,45 +131,45 @@ def generate_report(output_path, patient_info, hrv_results,
         cell.set_height(0.15)
 
 
-    # === Row 3: 底部區塊 (分析與建議) ===
+    # === Row 3: 底部區塊 (Analysis & Recommendation) ===
     ax_text = fig.add_subplot(gs[3])
     ax_text.axis('off')
 
-    # 1. 定義換行寬度 (這決定了文字橫向發展的極限)
-    wrap_width = 85 
+    text_bbox = FancyBboxPatch((0.02, 0.02), 0.96, 0.96,
+                                boxstyle="round,pad=0.05",
+                                fc="#F8F9F9", ec="#DCDCDC", lw=1.5,
+                                transform=ax_text.transAxes, clip_on=False)
+    ax_text.add_patch(text_bbox)
 
-    # 2. 自動換行處理
+    wrap_width = 88
     analysis_wrapped = textwrap.fill(analysis_text, width=wrap_width, break_long_words=False)
     recommendation_wrapped = textwrap.fill(recommendation_text, width=wrap_width, break_long_words=False)
 
-    # 3. 強迫撐開邏輯：
-    # 我們在文字最後面加上一行由「空格」組成的長字串。
-    # 這些空格會隱形，但會強迫 bbox 撐開到指定寬度。
-    filler_spaces = " " * (wrap_width + 5) # 稍微多一點確保觸及邊界
-    
-    full_text = (
-        f'【  Analysis 】\n{analysis_wrapped}\n\n'
-        f'【 Recommendation 】\n{recommendation_wrapped}\n'
-        f'{filler_spaces}' # 加入這一行強迫撐開
-    )
+    line_h = 0.055
+    y = 0.90
 
-    # 4. 繪製文字
-    # x=0.0 代表起點在 10% 處 (GridSpec 設定)
-    ax_text.text(0.0, 0.95, full_text, 
-                 ha='left', va='top', 
-                 fontsize=11, 
-                 transform=ax_text.transAxes, 
-                 linespacing=1.8,
-                 bbox=dict(boxstyle='round,pad=1.5', 
-                           facecolor='#F8F9F9', 
-                           edgecolor='#DCDCDC', 
-                           linewidth=1.5))
+    ax_text.text(0.06, y, '[ Analysis ]',
+                 ha='left', va='top', fontsize=11, fontweight='bold',
+                 transform=ax_text.transAxes)
+    y -= line_h * 1.5
+
+    ax_text.text(0.06, y, analysis_wrapped,
+                 ha='left', va='top', fontsize=11,
+                 transform=ax_text.transAxes, linespacing=1.8)
+    n_analysis = analysis_wrapped.count('\n') + 1
+    y -= (n_analysis - 1) * line_h + line_h * 2.5
+
+    ax_text.text(0.06, y, '[ Recommendation ]',
+                 ha='left', va='top', fontsize=11, fontweight='bold',
+                 transform=ax_text.transAxes)
+    y -= line_h * 1.5
+
+    ax_text.text(0.06, y, recommendation_wrapped,
+                 ha='left', va='top', fontsize=11,
+                 transform=ax_text.transAxes, linespacing=1.8)
     
     # 存檔 PDF
     with PdfPages(output_path) as pdf:
         pdf.savefig(fig, dpi=150)
     plt.close(fig)
 
-    # 刪除暫存圖
-    if os.path.exists(tmp_file):
-        os.remove(tmp_file)

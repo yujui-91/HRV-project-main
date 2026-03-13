@@ -26,3 +26,4 @@ dist/
 # Data outputs
 *.csv
 *.pdf
+!debug_layout.pdf

@@ -5,7 +5,8 @@ from scipy.interpolate import interp1d
 from scipy.signal import welch
 
 
-def create_taichi_plot(lf_hf_ratio, lf_nu=None, hf_nu=None, add_legend=True):
+def create_taichi_plot(lf_hf_ratio, lf_nu=None, hf_nu=None, add_legend=True,
+                       ax=None, lang='zh'):
     """
     Create a Taichi (yin-yang) plot showing sympathetic/parasympathetic balance.
 
@@ -19,18 +20,25 @@ def create_taichi_plot(lf_hf_ratio, lf_nu=None, hf_nu=None, add_legend=True):
         HF normalized units (percentage).
     add_legend : bool
         Whether to add legend labels.
+    ax : matplotlib.axes.Axes, optional
+        Target axes to draw into. If None, creates a new figure.
+    lang : str
+        Language for labels: 'zh' (default) or 'en'.
 
     Returns
     -------
-    fig : matplotlib.figure.Figure
+    fig : matplotlib.figure.Figure or None
+        The figure if a new one was created, otherwise None.
     """
     total = 1 + lf_hf_ratio
     sympathetic_ratio = lf_hf_ratio / total
     parasympathetic_ratio = 1 / total
 
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig = None
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 6))
 
-    R = 1.0
+    R = 0.8
     r_sympathetic = R * sympathetic_ratio
     r_parasympathetic = R * parasympathetic_ratio
 
@@ -59,29 +67,37 @@ def create_taichi_plot(lf_hf_ratio, lf_nu=None, hf_nu=None, add_legend=True):
     ax.add_patch(outer_circle)
 
     if add_legend:
-        legend_x = 1.3
-        ax.scatter(legend_x, 0.3, c='black', s=300, marker='o')
-        ax.text(legend_x + 0.1, 0.3, '交感', fontsize=16, va='center')
-        ax.scatter(legend_x, -0.3, c='white', s=300, marker='o',
+        sym_label = 'Sympathetic' if lang == 'en' else '交感'
+        par_label = 'Parasympathetic' if lang == 'en' else '副交感'
+        legend_fs = 11
+        legend_x = 1.25
+        ax.scatter(legend_x, 0.3, c='black', s=150, marker='o')
+        ax.text(legend_x + 0.20, 0.3, sym_label, fontsize=legend_fs, va='center')
+        ax.scatter(legend_x, -0.3, c='white', s=150, marker='o',
                    edgecolors='black', linewidth=1)
-        ax.text(legend_x + 0.1, -0.3, '副交感', fontsize=16, va='center')
+        ax.text(legend_x + 0.20, -0.3, par_label, fontsize=legend_fs, va='center')
 
     if lf_nu is not None and hf_nu is not None:
         info_text = (f'LF/HF ratio = {lf_hf_ratio:.3f}\n'
                      f'LFnu = {lf_nu:.1f}%\nHFnu = {hf_nu:.1f}%')
     else:
+        sym_pct_label = 'Sympathetic' if lang == 'en' else '交感'
+        par_pct_label = 'Parasympathetic' if lang == 'en' else '副交感'
         info_text = (f'LF/HF ratio = {lf_hf_ratio:.3f}\n'
-                     f'交感: {sympathetic_ratio*100:.1f}%\n'
-                     f'副交感: {parasympathetic_ratio*100:.1f}%')
+                     f'{sym_pct_label}: {sympathetic_ratio*100:.1f}%\n'
+                     f'{par_pct_label}: {parasympathetic_ratio*100:.1f}%')
 
-    ax.text(0, -1.4, info_text, ha='center', va='top', fontsize=17,
-            bbox=dict(boxstyle='round,pad=0.6', facecolor='lightgray', alpha=0.8))
+    ax.text(0, -1.4, info_text, ha='center', va='top', fontsize=11,
+            linespacing=2.0,
+            bbox=dict(boxstyle='round,pad=0.8', facecolor='lightgray', alpha=0.8))
 
-    ax.set_xlim(-1.2, 1.6)
-    ax.set_ylim(-2.1, 1.2)
+    xlim_right = 2.6 if lang == 'en' else 1.6
+    ax.set_xlim(-1.2, xlim_right)
+    ax.set_ylim(-2.5, 1.2)
     ax.set_aspect('equal')
     ax.axis('off')
-    fig.tight_layout()
+    if fig is not None:
+        fig.tight_layout()
     return fig
 
 

@@ -5,9 +5,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-# from ..templates.template_data import (
-#     get_dropdown_labels, get_template, get_key_by_index, CONDITION_ORDER,
-# )
 from ..templates import template_data as tmpl_ch
 from ..templates import template_data_Eng as tmpl_en
 from .workers import AnalysisWorker, ReportWorker
@@ -236,12 +233,6 @@ class MainWindow(QMainWindow):
         self.analyze_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         QMessageBox.critical(self, '分析錯誤', error_msg)
-
-    # def _on_status_changed(self, index):
-    #     key = get_key_by_index(index)
-    #     template = get_template(key)
-    #     self.analysis_text.setPlainText(template['analysis'])
-    #     self.recommendation_text.setPlainText(template['recommendation'])
 
     def _on_browse_output(self):
         path, _ = QFileDialog.getSaveFileName(

@@ -21,7 +21,7 @@ TEMPLATES = {
     "noise": {
         "label": "Noise Interference",
         "analysis": (
-            "Based on the combined values above, the following information can be obtained:\n"
+            "Based on the combined values above, the following information can be obtained: "
             "This examination requires a quiet and steady state for accurate judgment. Your results show "
             "significant noise, possibly caused by speaking, movement, etc., "
             "making the data uninterpretable."
@@ -31,8 +31,8 @@ TEMPLATES = {
     "normal": {
         "label": "Normal",
         "analysis": (
-            "Based on the combined values above, the following information can be obtained:\n"
-            "In the time-domain analysis, your SDNN is above the standard value, indicating a relatively lower cardiovascular risk.\n"
+            "Based on the combined values above, the following information can be obtained: "
+            "In the time-domain analysis, your SDNN is above the standard value, indicating a relatively lower cardiovascular risk. "
             "In the frequency-domain analysis, your data shows that the parasympathetic nervous system was more active during the baseline period; "
             "the parasympathetic nervous system was active during the stress period; and sympathetic activity decreased during the recovery period. "
             "Your overall autonomic nervous system has returned to a state of parasympathetic dominance."
