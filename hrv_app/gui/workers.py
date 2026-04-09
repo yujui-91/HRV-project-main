@@ -30,12 +30,13 @@ class AnalysisWorker(QThread):
     error = pyqtSignal(str)
 
     def __init__(self, file_path, channel_index=0, file_data=None,
-                 phase_ranges=None):
+                 phase_ranges=None, algorithm='vollmer'):
         super().__init__()
         self.file_path = file_path
         self.channel_index = channel_index
         self.file_data = file_data
         self.phase_ranges = phase_ranges
+        self.algorithm = algorithm
 
     def run(self):
         try:
@@ -64,14 +65,16 @@ class AnalysisWorker(QThread):
                     segment = ecg_processed[start_ds:end_ds]
                     self.progress.emit(f"HRV 分析中（{phase_name}）...")
                     try:
-                        phases[phase_name] = analyze_hrv(segment,
-                                                        sampling_rate=1000)
+                        phases[phase_name] = analyze_hrv(
+                            segment, sampling_rate=1000,
+                            algorithm=self.algorithm)
                     except Exception:
                         phases[phase_name] = None
             else:
                 self.progress.emit("HRV 分析中...")
-                phases['baseline'] = analyze_hrv(ecg_processed,
-                                                 sampling_rate=1000)
+                phases['baseline'] = analyze_hrv(
+                    ecg_processed, sampling_rate=1000,
+                    algorithm=self.algorithm)
                 phases['stress'] = None
                 phases['recovery'] = None
 

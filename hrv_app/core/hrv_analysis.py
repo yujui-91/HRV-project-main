@@ -2,7 +2,7 @@ import numpy as np
 from hrv_app.core import vollmer_hrv as vh
 
 
-def analyze_hrv(ecg_signal, sampling_rate=1000):
+def analyze_hrv(ecg_signal, sampling_rate=1000, algorithm='vollmer'):
     """
     Extended HRV analysis returning metrics and intermediate data for plots.
 
@@ -12,6 +12,8 @@ def analyze_hrv(ecg_signal, sampling_rate=1000):
         Preprocessed ECG signal (single channel).
     sampling_rate : int
         Sampling rate in Hz.
+    algorithm : str
+        'vollmer' (default) or 'rri' (5-method template-based detection).
 
     Returns
     -------
@@ -23,6 +25,10 @@ def analyze_hrv(ecg_signal, sampling_rate=1000):
         - 'rr_intervals': ndarray of RR intervals in seconds
         - 'rr_times': ndarray of cumulative time for each RR interval
     """
+    if algorithm == 'rri':
+        from .rri_rpeak import analyze_rri
+        return analyze_rri(ecg_signal, fs=sampling_rate)
+
     ecg_signal = np.asarray(ecg_signal, dtype=float).ravel()
 
     # 1. R-peak detection (Vollmer morphological method)

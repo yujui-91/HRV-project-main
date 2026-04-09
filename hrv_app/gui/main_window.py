@@ -52,6 +52,11 @@ class MainWindow(QMainWindow):
         self.analyze_btn.setEnabled(False)
         file_layout.addWidget(self.analyze_btn, 1, 2)
 
+        file_layout.addWidget(QLabel('演算法:'), 2, 0)
+        self.algorithm_combo = QComboBox()
+        self.algorithm_combo.addItems(['Vollmer', 'RRI (5-Method)'])
+        file_layout.addWidget(self.algorithm_combo, 2, 1)
+
         file_group.setLayout(file_layout)
         layout.addWidget(file_group)
 
@@ -333,10 +338,12 @@ class MainWindow(QMainWindow):
         self.progress_bar.setRange(0, 0)  # indeterminate
         self.progress_bar.setVisible(True)
 
+        algorithm = 'vollmer' if self.algorithm_combo.currentIndex() == 0 else 'rri'
         self.worker = AnalysisWorker(
             path, channel_idx,
             file_data=self._file_data,
-            phase_ranges=phase_ranges)
+            phase_ranges=phase_ranges,
+            algorithm=algorithm)
         self.worker.progress.connect(
             lambda msg: self.status_bar.showMessage(msg))
         self.worker.finished.connect(self._on_analysis_done)
