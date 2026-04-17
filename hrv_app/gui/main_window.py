@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit,
     QFileDialog, QGroupBox, QMessageBox, QStatusBar, QProgressBar,
+    QFrame,
 )
 from PyQt6.QtCore import Qt
 
@@ -14,7 +15,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('HRV 自律神經分析系統')
-        self.setMinimumSize(700, 800)
+        self.setMinimumSize(1200, 500)
         self.active_tmpl = tmpl_ch
         self.hrv_results = None
         self.worker = None
@@ -30,9 +31,12 @@ class MainWindow(QMainWindow):
     def _build_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
+        main_layout = QHBoxLayout(central)
 
-        # === File selection ===
+        left_layout = QVBoxLayout()
+        right_layout = QVBoxLayout()
+
+        # === File selection === (left)
         file_group = QGroupBox('檔案選擇')
         file_layout = QGridLayout()
 
@@ -58,9 +62,9 @@ class MainWindow(QMainWindow):
         file_layout.addWidget(self.algorithm_combo, 2, 1)
 
         file_group.setLayout(file_layout)
-        layout.addWidget(file_group)
+        left_layout.addWidget(file_group)
 
-        # === Marker selection ===
+        # === Marker selection === (left)
         self.marker_group = QGroupBox('標記選擇')
         self.marker_group.setEnabled(False)
         marker_layout = QVBoxLayout()
@@ -90,9 +94,9 @@ class MainWindow(QMainWindow):
 
         marker_layout.addLayout(phase_grid)
         self.marker_group.setLayout(marker_layout)
-        layout.addWidget(self.marker_group)
+        left_layout.addWidget(self.marker_group)
 
-        # === Patient info ===
+        # === Patient info === (left)
         patient_group = QGroupBox('病患資訊')
         patient_layout = QGridLayout()
 
@@ -111,16 +115,16 @@ class MainWindow(QMainWindow):
         patient_layout.addWidget(self.birth_date_edit, 1, 3)
 
         patient_group.setLayout(patient_layout)
-        layout.addWidget(patient_group)
+        right_layout.addWidget(patient_group)
 
-        # === HRV Metrics (修改為網格顯示三個階段) ===
+        # === HRV Metrics (修改為網格顯示三個階段) === (left)
         metrics_group = QGroupBox('HRV 指標對照 (Baseline / Stress / Recovery)')
         metrics_layout = QGridLayout()
 
         phases = ['baseline', 'stress', 'recovery']
         # 定義要顯示的指標名稱 (UI 顯示用)
         self.display_metrics = ['HR', 'SDNN', 'RMSSD', 'LF', 'HF', 'LF/HF']
-        
+
         # 建立表頭 (第一列)
         metrics_layout.addWidget(QLabel('指標名稱'), 0, 0)
         for i, p_name in enumerate(['Baseline', 'Stress', 'Recovery'], 1):
@@ -145,9 +149,9 @@ class MainWindow(QMainWindow):
                 self.metric_labels[p][m_name] = lbl
 
         metrics_group.setLayout(metrics_layout)
-        layout.addWidget(metrics_group)
+        left_layout.addWidget(metrics_group)
 
-        # === Status + Analysis + Recommendation ===
+        # === Status + Analysis + Recommendation === (right)
         status_group = QGroupBox('分析與建議')
         status_layout = QVBoxLayout()
 
@@ -175,12 +179,13 @@ class MainWindow(QMainWindow):
         status_layout.addWidget(self.recommendation_text)
 
         status_group.setLayout(status_layout)
-        layout.addWidget(status_group)
+        right_layout.addWidget(status_group)
+        right_layout.addStretch()
 
         # Load default template
         self._on_status_changed(0)
 
-        # === Output ===
+        # === Output === (right)
         output_group = QGroupBox('PDF 報告輸出')
         output_layout = QHBoxLayout()
 
@@ -195,7 +200,15 @@ class MainWindow(QMainWindow):
         output_layout.addWidget(self.export_btn)
 
         output_group.setLayout(output_layout)
-        layout.addWidget(output_group)
+        right_layout.addWidget(output_group)
+
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.VLine)
+        divider.setFrameShadow(QFrame.Shadow.Sunken)
+
+        main_layout.addLayout(left_layout, 1)
+        main_layout.addWidget(divider)
+        main_layout.addLayout(right_layout, 1)
 
         # === Status bar with progress ===
         self.status_bar = QStatusBar()
