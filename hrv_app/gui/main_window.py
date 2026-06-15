@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit,
     QFileDialog, QGroupBox, QMessageBox, QStatusBar, QProgressBar,
+    QFrame,
 )
 from PyQt6.QtCore import Qt
 
@@ -14,7 +15,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('HRV 自律神經分析系統')
-        self.setMinimumSize(700, 800)
+        self.setMinimumSize(1200, 500)
         self.active_tmpl = tmpl_ch
         self.hrv_results = None
         self.worker = None
@@ -30,9 +31,12 @@ class MainWindow(QMainWindow):
     def _build_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
+        main_layout = QHBoxLayout(central)
 
-        # === File selection ===
+        left_layout = QVBoxLayout()
+        right_layout = QVBoxLayout()
+
+        # === File selection === (left)
         file_group = QGroupBox('檔案選擇')
         file_layout = QGridLayout()
 
@@ -58,9 +62,9 @@ class MainWindow(QMainWindow):
         file_layout.addWidget(self.algorithm_combo, 2, 1)
 
         file_group.setLayout(file_layout)
-        layout.addWidget(file_group)
+        left_layout.addWidget(file_group)
 
-        # === Marker selection ===
+        # === Marker selection === (left)
         self.marker_group = QGroupBox('標記選擇')
         self.marker_group.setEnabled(False)
         marker_layout = QVBoxLayout()
@@ -90,9 +94,9 @@ class MainWindow(QMainWindow):
 
         marker_layout.addLayout(phase_grid)
         self.marker_group.setLayout(marker_layout)
-        layout.addWidget(self.marker_group)
+        left_layout.addWidget(self.marker_group)
 
-        # === Patient info ===
+        # === Patient info === (left)
         patient_group = QGroupBox('病患資訊')
         patient_layout = QGridLayout()
 
@@ -111,16 +115,16 @@ class MainWindow(QMainWindow):
         patient_layout.addWidget(self.birth_date_edit, 1, 3)
 
         patient_group.setLayout(patient_layout)
-        layout.addWidget(patient_group)
+        right_layout.addWidget(patient_group)
 
-        # === HRV Metrics (修改為網格顯示三個階段) ===
+        # === HRV Metrics (修改為網格顯示三個階段) === (left)
         metrics_group = QGroupBox('HRV 指標對照 (Baseline / Stress / Recovery)')
         metrics_layout = QGridLayout()
 
         phases = ['baseline', 'stress', 'recovery']
         # 定義要顯示的指標名稱 (UI 顯示用)
         self.display_metrics = ['HR', 'SDNN', 'RMSSD', 'LF', 'HF', 'LF/HF']
-        
+
         # 建立表頭 (第一列)
         metrics_layout.addWidget(QLabel('指標名稱'), 0, 0)
         for i, p_name in enumerate(['Baseline', 'Stress', 'Recovery'], 1):
@@ -145,9 +149,9 @@ class MainWindow(QMainWindow):
                 self.metric_labels[p][m_name] = lbl
 
         metrics_group.setLayout(metrics_layout)
-        layout.addWidget(metrics_group)
+        left_layout.addWidget(metrics_group)
 
-        # === Status + Analysis + Recommendation ===
+        # === Status + Analysis + Recommendation === (right)
         status_group = QGroupBox('分析與建議')
         status_layout = QVBoxLayout()
 
@@ -175,12 +179,13 @@ class MainWindow(QMainWindow):
         status_layout.addWidget(self.recommendation_text)
 
         status_group.setLayout(status_layout)
-        layout.addWidget(status_group)
+        right_layout.addWidget(status_group)
+        right_layout.addStretch()
 
         # Load default template
         self._on_status_changed(0)
 
-        # === Output ===
+        # === Output === (right)
         output_group = QGroupBox('PDF 報告輸出')
         output_layout = QHBoxLayout()
 
@@ -195,7 +200,15 @@ class MainWindow(QMainWindow):
         output_layout.addWidget(self.export_btn)
 
         output_group.setLayout(output_layout)
-        layout.addWidget(output_group)
+        right_layout.addWidget(output_group)
+
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.VLine)
+        divider.setFrameShadow(QFrame.Shadow.Sunken)
+
+        main_layout.addLayout(left_layout, 1)
+        main_layout.addWidget(divider)
+        main_layout.addLayout(right_layout, 1)
 
         # === Status bar with progress ===
         self.status_bar = QStatusBar()
@@ -247,7 +260,7 @@ class MainWindow(QMainWindow):
 
         # Populate channel combo
         self.channel_combo.clear()
-        n_channels = file_data['n_sig']
+        n_channels = file_data.get('n_sig', 0)
         sig_names = file_data.get('sig_name', [])
         for i in range(n_channels):
             name = sig_names[i] if i < len(sig_names) else f'Channel {i}'
@@ -262,12 +275,13 @@ class MainWindow(QMainWindow):
 
         # Populate markers
         markers = file_data.get('markers')
-        fs = file_data.get('fs', 1)
+        fs = file_data.get('fs', 1) or 1
         self._populate_markers(markers, fs)
 
+        n_markers = len(markers) if markers is not None else 0
         self.status_bar.showMessage(
             f'檔案載入完成 — {n_channels} 個通道, fs={fs} Hz, '
-            f'{len(markers)} 個標記', 5000)
+            f'{n_markers} 個標記', 5000)
 
     def _on_file_load_error(self, error_msg):
         self.progress_bar.setVisible(False)
@@ -276,6 +290,8 @@ class MainWindow(QMainWindow):
     def _populate_markers(self, markers, fs):
         """Fill marker combo boxes with simplified second-based formatting."""
         self._raw_markers = list(markers) if markers is not None else []
+        if not fs:  # 防止 fs 為 0/None 造成除以零 (損壞的 TFF 標頭)
+            fs = 1
 
         # 建立標記列表文字
         marker_items = []
@@ -366,13 +382,17 @@ class MainWindow(QMainWindow):
         phases = ['baseline', 'stress', 'recovery']
         
         for p in phases:
-            # 從結果中取得該階段的 metrics (若無該階段數據則回傳空字典)
-            p_data = results.get('phases', {}).get(p, {})
-            p_metrics = p_data.get('metrics', {})
-            
+            # 從結果中取得該階段的 metrics。
+            # 注意: worker 會把未分析的 phase 設為 None (鍵存在、值為 None)，
+            # 故 .get(p, {}) 的預設值 {} 不會生效，必須用 `or {}` 把 None 收斂成空字典；
+            # 否則 None.get('metrics') 會拋 AttributeError，而 slot 內未捕捉的例外
+            # 會讓 PyQt6 直接 abort() (整個視窗消失、無錯誤對話框)。
+            p_data = results.get('phases', {}).get(p) or {}
+            p_metrics = p_data.get('metrics') or {}
+
             # 如果是 baseline 且 phases 內沒資料，嘗試抓取頂層 metrics (向下相容)
             if p == 'baseline' and not p_metrics:
-                p_metrics = results.get('metrics', {})
+                p_metrics = results.get('metrics') or {}
 
             for ui_name, data_key in mapping.items():
                 val = p_metrics.get(data_key)

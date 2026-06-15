@@ -1,0 +1,14 @@
+# HRV-project runtime dependencies (pip install -r requirements.txt)
+# Pinned to the versions verified working in the `hrv-project` conda env.
+# Mirrors the dependencies declared in pyproject.toml.
+# For full reproducibility (incl. transitive deps), prefer poetry + poetry.lock.
+
+numpy==2.2.6
+scipy==1.15.3
+matplotlib==3.10.8
+pandas==2.3.3
+PyQt6==6.10.2
+
+# Only used by code under legacy/ (not the hrv_app GUI), but declared in pyproject:
+neurokit2==0.2.13
+wfdb==4.3.1

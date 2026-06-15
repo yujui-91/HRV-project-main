@@ -129,19 +129,9 @@ def _lowpass_filter(signal: NDArray, fs: float, cutoff: float = 50.0,
     return filtfilt(b, a, signal)
 
 
-def _take_last_km_minutes(signal: NDArray, fs: float, km: float) -> NDArray:
-    """Return the last *km* minutes of a signal."""
-    total_samples = len(signal)
-    total_minutes = (total_samples - 1) / fs / 60.0
-    if km >= total_minutes:
-        return signal.copy()
-    start = int((total_samples - 1) * (total_minutes - km) / total_minutes) + 1
-    return signal[start:].copy()
-
-
-def _preprocess(signal: NDArray, fs: float, km: float,
+def _preprocess(signal: NDArray, fs: float,
                 cutoff: float = 50.0) -> tuple[NDArray, float]:
-    """Shared preprocessing: lowpass -> last km min -> DC removal -> normalize.
+    """Shared preprocessing: lowpass -> DC removal -> normalize.
 
     Returns
     -------
@@ -149,7 +139,6 @@ def _preprocess(signal: NDArray, fs: float, km: float,
     norm_factor : the normalization divisor (max(abs(x1)))
     """
     sig = _lowpass_filter(signal, fs, cutoff=cutoff)
-    sig = _take_last_km_minutes(sig, fs, km)
     sig = sig - sig.mean()  # DC removal
     norm_factor = np.max(np.abs(sig))
     if norm_factor == 0:
@@ -205,7 +194,6 @@ _STD_THRESHOLD_S = 0.012    # 30 samples / 2500 Hz
 def rri_calibrate(
     signal: NDArray,
     fs: float = 2500.0,
-    km: float = 5.0,
     n_peaks: int = 3,
     sim_thresh: float = 0.95,
 ) -> Dict[str, Any]:
@@ -219,8 +207,6 @@ def rri_calibrate(
         Raw ECG signal (single channel).
     fs : float
         Sampling rate in Hz.
-    km : float
-        Use the last *km* minutes of the recording.
     n_peaks : int
         Number of template peaks to extract (default 3).
     sim_thresh : float
@@ -248,7 +234,7 @@ def rri_calibrate(
     ww = [int(t * fs) for t in _LOOKBACK_CANDIDATES_S]
 
     # -- Preprocessing --
-    nx1, norm_factor = _preprocess(signal, fs, km)
+    nx1, norm_factor = _preprocess(signal, fs)
 
     # -- Pad signal end so template extraction near edges doesn't fail --
     nx1 = np.concatenate([nx1, np.zeros(pre_peak)])
@@ -468,7 +454,6 @@ def rri_detect(
     signal: NDArray,
     calibration: Dict[str, Any],
     fs: float = 2500.0,
-    km: float = 5.0,
     corr_thresh: float = 0.90,
     rri_floor_s: float = 0.4,
     rri_ceil_s: float = 4.0,
@@ -485,8 +470,6 @@ def rri_detect(
         Output of ``rri_calibrate()``.
     fs : float
         Sampling rate in Hz.
-    km : float
-        Use the last *km* minutes of the recording.
     corr_thresh : float
         Distance-correlation threshold for Method 2 (default 0.90).
     rri_floor_s : float
@@ -524,7 +507,6 @@ def rri_detect(
 
     # -- Preprocessing (same filter, but normalize by calibration norm_factor) --
     sig = _lowpass_filter(signal, fs, cutoff=50.0)
-    sig = _take_last_km_minutes(sig, fs, km)
     sig = sig - sig.mean()
     nx1 = sig / norm_factor
 
@@ -697,10 +679,20 @@ def rri_detect(
 # Top-level convenience function
 # ===================================================================
 
+def _round2(x):
+    """Round to 2 decimals; return None for None/NaN/non-numeric (UI shows '--')."""
+    try:
+        xf = float(x)
+    except (TypeError, ValueError):
+        return None
+    if np.isnan(xf):
+        return None
+    return round(xf, 2)
+
+
 def analyze_rri(
     ecg_signal: NDArray,
     fs: float = 2500.0,
-    km: float = 5.0,
     corr_thresh: float = 0.90,
     rri_floor_s: float = 0.4,
     rri_ceil_s: float = 4.0,
@@ -716,8 +708,6 @@ def analyze_rri(
         Raw ECG signal (single channel).
     fs : float
         Sampling rate in Hz.
-    km : float
-        Use the last *km* minutes of the recording.
     corr_thresh : float
         Distance-correlation threshold for Method 2.
     rri_floor_s, rri_ceil_s : float
@@ -735,7 +725,7 @@ def analyze_rri(
     ecg_signal = np.asarray(ecg_signal, dtype=float).ravel()
 
     # Step 1: calibrate
-    calibration = rri_calibrate(ecg_signal, fs=fs, km=km)
+    calibration = rri_calibrate(ecg_signal, fs=fs)
 
     if not calibration["similarity_ok"]:
         warnings.warn("Calibration failed: template similarity not achieved.")
@@ -749,7 +739,7 @@ def analyze_rri(
 
     # Step 2: detect
     detection = rri_detect(
-        ecg_signal, calibration, fs=fs, km=km,
+        ecg_signal, calibration, fs=fs,
         corr_thresh=corr_thresh,
         rri_floor_s=rri_floor_s, rri_ceil_s=rri_ceil_s,
     )
@@ -763,29 +753,30 @@ def analyze_rri(
     # Cumulative RR times
     rr_times = np.cumsum(rr_clean) if len(rr_clean) > 0 else np.array([])
 
-    # Step 3: build metrics dict
+    # Step 3: build metrics dict (all values rounded to 2 decimals; NaN -> None)
     metrics: Dict[str, Any] = {
-        "HR_mean": hr,
-        "HRV_SDNN": sdnn,
-        "HRV_RMSSD": rmssd,
+        "HR_mean": _round2(hr),
+        "HRV_SDNN": _round2(sdnn),
+        "HRV_RMSSD": _round2(rmssd),
     }
 
-    # Extended HRV metrics (frequency-domain, nonlinear) if available
+    # Extended HRV metrics (frequency-domain, nonlinear) if available.
+    # NOTE: vollmer_hrv expects RR intervals in SECONDS (it builds the time axis
+    # via cumsum(RR)); the correct API is fft_val_fun(...) / DFA(...), exactly as
+    # used by the Vollmer path in hrv_analysis.py.
     if HAS_VH and len(rr_clean) >= 5:
         try:
-            rr_ms = rr_clean * 1000  # vollmer_hrv typically expects ms
-
-            # Frequency domain
-            lf, hf, lf_hf, lfnu, hfnu = vh.freq_domain(rr_ms)
-            metrics["HRV_LF"] = lf
-            metrics["HRV_HF"] = hf
-            metrics["HRV_LF_HF"] = lf_hf
-            metrics["LFnu"] = lfnu
-            metrics["HFnu"] = hfnu
+            # Frequency domain — rr_clean is in seconds; fs is the resample grid (Hz)
+            fft = vh.fft_val_fun(rr_clean, fs)
+            metrics["HRV_LF"] = _round2(fft["LF"])
+            metrics["HRV_HF"] = _round2(fft["HF"])
+            metrics["HRV_LF_HF"] = _round2(fft["LFHFratio"])
+            metrics["LFnu"] = _round2(fft["pLF"])
+            metrics["HFnu"] = _round2(fft["pHF"])
 
             # Nonlinear: DFA alpha1
-            alpha1 = vh.dfa_alpha1(rr_ms)
-            metrics["HRV_DFA_alpha1"] = alpha1
+            alpha1, _ = vh.DFA(rr_clean)
+            metrics["HRV_DFA_alpha1"] = _round2(alpha1)
         except Exception as e:
             warnings.warn(f"Extended HRV computation failed: {e}")
 
