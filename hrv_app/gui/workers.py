@@ -1,9 +1,9 @@
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from core.tff_reader import read_tff_file
-from core.preprocessing import preprocess_ecg
-from core.hrv_analysis import analyze_hrv
-from core.report_generator import generate_report
+from hrv_app.core.tff_reader import read_tff_file
+from hrv_app.core.preprocessing import preprocess_ecg
+from hrv_app.core.hrv_analysis import analyze_hrv
+from hrv_app.core.report_generator import generate_report
 
 
 class FileLoadWorker(QThread):
@@ -114,9 +114,9 @@ class ReportWorker(QThread):
             
             # 根據語言決定使用的導入
             if self.lang == 'English':
-                from ..core.report_generator_Eng import generate_report
+                from hrv_app.core.report_generator_Eng import generate_report
             else:
-                from ..core.report_generator import generate_report
+                from hrv_app.core.report_generator import generate_report
             
             generate_report(
                 self.output_path,
