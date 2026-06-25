@@ -1,9 +1,9 @@
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from ..core.tff_reader import read_tff_file
-from ..core.preprocessing import preprocess_ecg
-from ..core.hrv_analysis import analyze_hrv
-from ..core.report_generator import generate_report
+from core.tff_reader import read_tff_file
+from core.preprocessing import preprocess_ecg
+from core.hrv_analysis import analyze_hrv
+from core.report_generator import generate_report
 
 
 class FileLoadWorker(QThread):

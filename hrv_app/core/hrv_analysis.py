@@ -1,5 +1,5 @@
 import numpy as np
-from hrv_app.core import vollmer_hrv as vh
+from core import vollmer_hrv as vh
 
 
 def analyze_hrv(ecg_signal, sampling_rate=1000, algorithm='vollmer'):

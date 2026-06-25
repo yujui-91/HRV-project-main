@@ -6,7 +6,7 @@ matplotlib.use('QtAgg')
 import matplotlib.pyplot as plt
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from .gui.main_window import MainWindow
+from gui.main_window import MainWindow
 
 
 def _install_excepthook():

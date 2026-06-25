@@ -1,0 +1,10 @@
+matplotlib
+neurokit2
+numpy
+pandas
+PyQt6
+PyWavelets
+scikit-learn
+scipy
+wfdb
+pyinstaller

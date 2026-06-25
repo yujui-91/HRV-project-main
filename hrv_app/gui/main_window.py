@@ -6,9 +6,9 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from ..templates import template_data as tmpl_ch
-from ..templates import template_data_Eng as tmpl_en
-from .workers import AnalysisWorker, FileLoadWorker, ReportWorker
+from templates import template_data as tmpl_ch
+from templates import template_data_Eng as tmpl_en
+from gui.workers import AnalysisWorker, FileLoadWorker, ReportWorker
 
 
 class MainWindow(QMainWindow):
