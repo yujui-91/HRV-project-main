@@ -1,65 +1,60 @@
 """
-Module for reading .edf format files using pyedflib.
+Module for reading .edf format files using MNE.
 """
 import datetime
 import numpy as np
-import pyedflib
-from scipy import signal as scipy_signal
+import mne
 
-def read_edf_file(file_path, target_fs=10000):
+def read_edf_file(file_path):
     """
-    Reads an .edf file, resamples all channels to 10000Hz, 
-    and returns a standardized dictionary.
+    Reads an .edf file using MNE, resamples if needed,
+    and returns a standardized dictionary matching the GUI pipeline.
     """
-    f = pyedflib.EdfReader(file_path)
+    # 1. 載入 EDF 檔案 (preload=True 載入資料至記憶體)
+    mne.set_log_level('WARNING')
+    raw = mne.io.read_raw_edf(file_path, preload=True)
     
-    n_sig = f.signals_in_file
-    sig_names = f.getSignalLabels()
+    fs = raw.info['sfreq']
+    sig_names = raw.ch_names
+    n_sig = len(sig_names)
     
-    resampled_signals = []
+    # 轉置訊號矩陣，使其符合 (samples, channels) 的形狀
+    signal_matrix = raw.get_data().T
     
-    # Process each channel independently
-    for i in range(n_sig):
-        fs_orig = f.getSampleFrequency(i)
-        sig_orig = f.readSignal(i)
-        
-        if fs_orig != target_fs and fs_orig > 0:
-            num_target_samples = int(len(sig_orig) * (target_fs / fs_orig))
-            sig_resampled = scipy_signal.resample(sig_orig, num_target_samples)
-        else:
-            sig_resampled = sig_orig
-            
-        resampled_signals.append(sig_resampled)
-        
-    # Align lengths
-    min_len = min(len(sig) for sig in resampled_signals)
-    signal_matrix = np.column_stack([sig[:min_len] for sig in resampled_signals])
-    
-    # Extract Date/Time
-    startdate = f.getStartdatetime()
-    if startdate:
-        base_date = startdate.date()
-        base_time = startdate.time()
+    # 2. 獲取測量起始時間
+    meas_date = raw.info['meas_date']
+    if meas_date is not None:
+        base_date = meas_date.date()
+        base_time = meas_date.time()
     else:
         base_date = datetime.date.today()
         base_time = datetime.datetime.now().time()
         
-    # Extract Annotations (Markers)
-    annotations = f.readAnnotations() # returns (onsets, durations, descriptions)
+    # 3. 💡 核心改進：使用 mne.annotations 抓取事件時間並轉為 Index
     markers = []
-    if annotations and len(annotations[0]) > 0:
-        onsets_seconds = annotations[0]
-        markers = [int(onset * target_fs) for onset in onsets_seconds]
-        
-    f.close()
+    triggers = []
     
+    annotations = raw.annotations
+    if annotations is not None and len(annotations) > 0:
+        for onset, duration, desc in zip(annotations.onset, annotations.duration, annotations.description):
+            # 透過 MNE 的內建方法將秒數(onset)精準轉換為數據點 Index
+            sample_index = raw.time_as_index(onset)[0]
+            
+            # 🎯 關鍵修正：不論是什麼事件，一律塞進 markers 確保 GUI 100% 讀到並繪製！
+            markers.append(sample_index)
+            
+            # 備份分流：如果符合 Trigger 特徵，才額外塞進 triggers 提供後續分析
+            desc_upper = desc.upper()
+            if any(k in desc_upper for k in ['STIM', 'TRIG', 'S ', 'USER TYPE']):
+                triggers.append(sample_index)
+
     return {
         'signal': signal_matrix,
-        'fs': target_fs,
+        'fs': fs,
         'n_sig': n_sig,
         'sig_name': sig_names,
         'base_time': base_time,
         'base_date': base_date,
-        'markers': np.array(markers, dtype='int'),
-        'triggers': np.array([], dtype='int')
+        'markers': np.array(markers, dtype='int'),      # 100% 的事件都在這，GUI 絕對能讀取與顯示
+        'triggers': np.array(triggers, dtype='int')     # 特定的實驗 Trigger 在這備用（相容分析模組）
     }
