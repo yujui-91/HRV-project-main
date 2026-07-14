@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit,
     QFileDialog, QGroupBox, QMessageBox, QStatusBar, QProgressBar,
-    QFrame,
+    QFrame, QStackedWidget, QDoubleSpinBox
 )
 from PyQt6.QtCore import Qt
 
@@ -64,10 +64,27 @@ class MainWindow(QMainWindow):
         file_group.setLayout(file_layout)
         left_layout.addWidget(file_group)
 
-        # === Marker selection === (left)
-        self.marker_group = QGroupBox('標記選擇')
-        self.marker_group.setEnabled(False)
-        marker_layout = QVBoxLayout()
+        # === Segment selection (Marker or Manual) === (left)
+        self.segment_group = QGroupBox('分析區段選擇')
+        self.segment_group.setEnabled(False)
+        segment_layout = QVBoxLayout()
+
+        # 模式選擇
+        mode_layout = QHBoxLayout()
+        mode_layout.addWidget(QLabel('選擇模式:'))
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItems(['標記模式 (Marker)', '手動輸入時間 (Manual)'])
+        mode_layout.addWidget(self.mode_combo)
+        mode_layout.addStretch()
+        segment_layout.addLayout(mode_layout)
+
+        # 建立堆疊面板以切換兩種模式的 UI
+        self.segment_stack = QStackedWidget()
+
+        # --- Page 0: Marker Mode ---
+        marker_page = QWidget()
+        marker_layout = QVBoxLayout(marker_page)
+        marker_layout.setContentsMargins(0, 0, 0, 0)
 
         self.marker_list_label = QLabel('尚未載入標記')
         self.marker_list_label.setWordWrap(True)
@@ -93,8 +110,51 @@ class MainWindow(QMainWindow):
             self.phase_combos[f'{phase_key}_end'] = end_combo
 
         marker_layout.addLayout(phase_grid)
-        self.marker_group.setLayout(marker_layout)
-        left_layout.addWidget(self.marker_group)
+        self.segment_stack.addWidget(marker_page)
+
+        # --- Page 1: Manual Time Mode ---
+        manual_page = QWidget()
+        manual_layout = QVBoxLayout(manual_page)
+        manual_layout.setContentsMargins(0, 0, 0, 0)
+
+        unit_layout = QHBoxLayout()
+        unit_layout.addWidget(QLabel('時間單位:'))
+        self.manual_unit_combo = QComboBox()
+        self.manual_unit_combo.addItems(['分 (Minutes)', '秒 (Seconds)'])
+        unit_layout.addWidget(self.manual_unit_combo)
+        unit_layout.addStretch()
+        manual_layout.addLayout(unit_layout)
+
+        manual_grid = QGridLayout()
+        manual_grid.addWidget(QLabel(''), 0, 0)
+        manual_grid.addWidget(QLabel('開始時間'), 0, 1)
+        manual_grid.addWidget(QLabel('結束時間'), 0, 2)
+
+        self.manual_inputs = {}
+        for row, (phase_key, phase_label) in enumerate([
+            ('baseline', 'Baseline'),
+            ('stress', 'Stress'),
+            ('recovery', 'Recovery'),
+        ], start=1):
+            manual_grid.addWidget(QLabel(f'{phase_label}:'), row, 0)
+            start_spin = QDoubleSpinBox()
+            start_spin.setRange(0, 999999)
+            start_spin.setDecimals(2)
+            end_spin = QDoubleSpinBox()
+            end_spin.setRange(0, 999999)
+            end_spin.setDecimals(2)
+            
+            manual_grid.addWidget(start_spin, row, 1)
+            manual_grid.addWidget(end_spin, row, 2)
+            
+            self.manual_inputs[phase_key] = {'start': start_spin, 'end': end_spin}
+
+        manual_layout.addLayout(manual_grid)
+        self.segment_stack.addWidget(manual_page)
+
+        segment_layout.addWidget(self.segment_stack)
+        self.segment_group.setLayout(segment_layout)
+        left_layout.addWidget(self.segment_group)
 
         # === Patient info === (left)
         patient_group = QGroupBox('病患資訊')
@@ -117,31 +177,26 @@ class MainWindow(QMainWindow):
         patient_group.setLayout(patient_layout)
         right_layout.addWidget(patient_group)
 
-        # === HRV Metrics (修改為網格顯示三個階段) === (left)
+        # === HRV Metrics === (left)
         metrics_group = QGroupBox('HRV 指標對照 (Baseline / Stress / Recovery)')
         metrics_layout = QGridLayout()
 
         phases = ['baseline', 'stress', 'recovery']
-        # 定義要顯示的指標名稱 (UI 顯示用)
         self.display_metrics = ['HR', 'SDNN', 'RMSSD', 'LF', 'HF', 'LF/HF']
 
-        # 建立表頭 (第一列)
         metrics_layout.addWidget(QLabel('指標名稱'), 0, 0)
         for i, p_name in enumerate(['Baseline', 'Stress', 'Recovery'], 1):
             lbl = QLabel(p_name)
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet("font-weight: bold; color: #2E86C1;") # 增加一點顏色區分
+            lbl.setStyleSheet("font-weight: bold; color: #2E86C1;")
             metrics_layout.addWidget(lbl, 0, i)
 
-        # 建立指標列與數值標籤
-        self.metric_labels = {} # 格式為 { phase: { metric_name: QLabel } }
+        self.metric_labels = {}
         for p in phases:
             self.metric_labels[p] = {}
 
         for row, m_name in enumerate(self.display_metrics, 1):
-            # 左側指標名稱
             metrics_layout.addWidget(QLabel(f"{m_name}:"), row, 0)
-            # 三個階段的數值欄位
             for col, p in enumerate(phases, 1):
                 lbl = QLabel('--')
                 lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -163,7 +218,6 @@ class MainWindow(QMainWindow):
 
         status_row.addWidget(QLabel('狀態:'))
         self.status_combo = QComboBox()
-        # 這裡先不 addItems，由後面的方法統一更新
         status_row.addWidget(self.status_combo)
         status_row.addStretch()
         status_layout.addLayout(status_row)
@@ -182,7 +236,6 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(status_group)
         right_layout.addStretch()
 
-        # Load default template
         self._on_status_changed(0)
 
         # === Output === (right)
@@ -210,7 +263,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(divider)
         main_layout.addLayout(right_layout, 1)
 
-        # === Status bar with progress ===
+        # === Status bar ===
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.progress_bar = QProgressBar()
@@ -225,12 +278,13 @@ class MainWindow(QMainWindow):
         self.lang_combo.currentIndexChanged.connect(self._on_language_changed)
         self.output_browse_btn.clicked.connect(self._on_browse_output)
         self.export_btn.clicked.connect(self._on_export_pdf)
+        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
 
     # --- Slots ---
 
-    
-
-
+    def _on_mode_changed(self, index):
+        """切換 標記模式/手動時間 面板"""
+        self.segment_stack.setCurrentIndex(index)
 
     def _on_browse_file(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -242,9 +296,8 @@ class MainWindow(QMainWindow):
             self._load_full_file(path)
 
     def _load_full_file(self, path):
-        """Read full TFF file in background to get signal, markers, and header info."""
         self.analyze_btn.setEnabled(False)
-        self.marker_group.setEnabled(False)
+        self.segment_group.setEnabled(False)
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setVisible(True)
         self.status_bar.showMessage('讀取檔案中...')
@@ -255,11 +308,9 @@ class MainWindow(QMainWindow):
         self.file_load_worker.start()
 
     def _on_file_loaded(self, file_data):
-        """Handle completed file loading — populate channels, markers, exam time."""
         self._file_data = file_data
         self.progress_bar.setVisible(False)
 
-        # Populate channel combo
         self.channel_combo.clear()
         n_channels = file_data.get('n_sig', 0)
         sig_names = file_data.get('sig_name', [])
@@ -269,69 +320,90 @@ class MainWindow(QMainWindow):
         self.channel_combo.setEnabled(True)
         self.analyze_btn.setEnabled(True)
 
-        # Auto-fill exam time
         base_date = file_data.get('base_date', '')
         base_time = file_data.get('base_time', '')
         self.exam_time_edit.setText(f'{base_date} {base_time}')
 
-        # Populate markers
         markers = file_data.get('markers')
         fs = file_data.get('fs', 1) or 1
         self._populate_markers(markers, fs)
 
         n_markers = len(markers) if markers is not None else 0
         self.status_bar.showMessage(
-            f'檔案載入完成 — {n_channels} 個通道, fs={fs} Hz, '
-            f'{n_markers} 個標記', 5000)
+            f'檔案載入完成 — {n_channels} 個通道, fs={fs} Hz, {n_markers} 個標記', 5000)
+
 
     def _on_file_load_error(self, error_msg):
         self.progress_bar.setVisible(False)
+        self.status_bar.clearMessage()
         QMessageBox.critical(self, '錯誤', f'無法讀取檔案:\n{error_msg}')
 
+
+
     def _populate_markers(self, markers, fs):
-        """Fill marker combo boxes with simplified second-based formatting."""
         self._raw_markers = list(markers) if markers is not None else []
-        if not fs:  # 防止 fs 為 0/None 造成除以零 (損壞的 TFF 標頭)
+        if not fs:
             fs = 1
 
-        # 建立標記列表文字
         marker_items = []
         for i, sample_idx in enumerate(self._raw_markers):
             time_sec = sample_idx / fs
-            # 修改處：僅顯示秒數，保留兩位小數
             marker_items.append(f'Marker {i + 1} ({time_sec:.2f}秒)')
 
-        # 更新 UI 上的標記列表顯示
         if marker_items:
             self.marker_list_label.setText('偵測到的標記: ' + ', '.join(marker_items))
         else:
             self.marker_list_label.setText('此檔案無標記')
 
-        # 填充下拉選單 (Baseline/Stress/Recovery 的起始與結束)
         for combo in self.phase_combos.values():
             combo.clear()
             combo.addItem('-- 未選擇 --')
             for item in marker_items:
                 combo.addItem(item)
 
-        if self._raw_markers:
-            self.marker_group.setEnabled(True)
-        else:
-            self.marker_group.setEnabled(False)
+        # 只要成功讀取檔案，就允許使用區段選擇
+        self.segment_group.setEnabled(True)
+        
+        # 若檔案無標記，自動切換至「手動輸入時間」模式
+        if not self._raw_markers:
+            self.mode_combo.setCurrentIndex(1)
 
     def _get_phase_ranges(self):
-        """Read combo box selections and return phase ranges as sample indices."""
-        if not self._raw_markers:
-            return None
+        """根據當前模式 (Marker/Manual) 讀取區段，並回傳原始取樣率對應的 Index"""
         phases = {}
-        for phase in ['baseline', 'stress', 'recovery']:
-            start_idx = self.phase_combos[f'{phase}_start'].currentIndex() - 1
-            end_idx = self.phase_combos[f'{phase}_end'].currentIndex() - 1
-            if start_idx >= 0 and end_idx >= 0:
-                phases[phase] = (self._raw_markers[start_idx],
-                                 self._raw_markers[end_idx])
-            else:
-                phases[phase] = None
+        mode = self.mode_combo.currentIndex()
+        
+        if mode == 0:  # Marker 模式
+            if not self._raw_markers:
+                return None
+            for phase in ['baseline', 'stress', 'recovery']:
+                start_idx = self.phase_combos[f'{phase}_start'].currentIndex() - 1
+                end_idx = self.phase_combos[f'{phase}_end'].currentIndex() - 1
+                if start_idx >= 0 and end_idx >= 0:
+                    phases[phase] = (self._raw_markers[start_idx],
+                                     self._raw_markers[end_idx])
+                else:
+                    phases[phase] = None
+        
+        else:  # 手動輸入時間模式
+            if not self._file_data:
+                return None
+            fs = self._file_data.get('fs', 1)
+            unit = self.manual_unit_combo.currentText()
+            multiplier = 60.0 if '分' in unit else 1.0
+            
+            for phase in ['baseline', 'stress', 'recovery']:
+                start_val = self.manual_inputs[phase]['start'].value()
+                end_val = self.manual_inputs[phase]['end'].value()
+                
+                # 如果起訖時間皆為 0，視為未選擇該區段
+                if start_val == 0.0 and end_val == 0.0:
+                    phases[phase] = None
+                else:
+                    start_idx = int(start_val * multiplier * fs)
+                    end_idx = int(end_val * multiplier * fs)
+                    phases[phase] = (start_idx, end_idx)
+
         return phases
 
     def _on_analyze(self):
@@ -341,18 +413,17 @@ class MainWindow(QMainWindow):
 
         phase_ranges = self._get_phase_ranges()
 
-        # Validate: start must be before end for selected phases
         if phase_ranges:
             for phase, r in phase_ranges.items():
                 if r is not None and r[0] >= r[1]:
                     QMessageBox.warning(
-                        self, '標記錯誤',
-                        f'{phase} 的起始標記必須在結束標記之前')
+                        self, '區段錯誤',
+                        f'{phase} 的起始時間/標記必須在結束時間/標記之前')
                     return
 
         channel_idx = self.channel_combo.currentIndex()
         self.analyze_btn.setEnabled(False)
-        self.progress_bar.setRange(0, 0)  # indeterminate
+        self.progress_bar.setRange(0, 0)
         self.progress_bar.setVisible(True)
 
         algorithm = 'vollmer' if self.algorithm_combo.currentIndex() == 0 else 'rri'
@@ -370,7 +441,6 @@ class MainWindow(QMainWindow):
     def _on_analysis_done(self, results):
         self.hrv_results = results
         
-        # UI 名稱與分析數據 Key 的對照表
         mapping = {
             'HR': 'HR_mean',
             'SDNN': 'HRV_SDNN',
@@ -383,15 +453,9 @@ class MainWindow(QMainWindow):
         phases = ['baseline', 'stress', 'recovery']
         
         for p in phases:
-            # 從結果中取得該階段的 metrics。
-            # 注意: worker 會把未分析的 phase 設為 None (鍵存在、值為 None)，
-            # 故 .get(p, {}) 的預設值 {} 不會生效，必須用 `or {}` 把 None 收斂成空字典；
-            # 否則 None.get('metrics') 會拋 AttributeError，而 slot 內未捕捉的例外
-            # 會讓 PyQt6 直接 abort() (整個視窗消失、無錯誤對話框)。
             p_data = results.get('phases', {}).get(p) or {}
             p_metrics = p_data.get('metrics') or {}
 
-            # 如果是 baseline 且 phases 內沒資料，嘗試抓取頂層 metrics (向下相容)
             if p == 'baseline' and not p_metrics:
                 p_metrics = results.get('metrics') or {}
 
@@ -438,14 +502,14 @@ class MainWindow(QMainWindow):
         self.export_btn.setEnabled(False)
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setVisible(True)
-        current_lang = self.lang_combo.currentText() # 取得目前選單文字 ('中文' 或 'English')
+        current_lang = self.lang_combo.currentText()
         self.report_worker = ReportWorker(
             output_path,
             patient_info,
             self.hrv_results,
             self.analysis_text.toPlainText(),
             self.recommendation_text.toPlainText(),
-            lang=current_lang, # 傳入語言參數
+            lang=current_lang,
         )
         self.report_worker.progress.connect(
             lambda msg: self.status_bar.showMessage(msg))
@@ -464,15 +528,12 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
         QMessageBox.critical(self, '匯出錯誤', error_msg)
 
-
     def _on_language_changed(self, index):
-        # 根據索引切換當前使用的模組
-        if index == 0:  # 中文
+        if index == 0:
             self.active_tmpl = tmpl_ch
-        else:           # 英文
+        else:
             self.active_tmpl = tmpl_en
         
-        # 斷開信號避免更新選單時觸發 _on_status_changed
         self.status_combo.blockSignals(True)
         current_idx = self.status_combo.currentIndex()
         self.status_combo.clear()
@@ -480,13 +541,11 @@ class MainWindow(QMainWindow):
         self.status_combo.setCurrentIndex(current_idx if current_idx >= 0 else 0)
         self.status_combo.blockSignals(False)
         
-        # 手動觸發一次內容更新
         self._on_status_changed(self.status_combo.currentIndex())
 
     def _on_status_changed(self, index):
         if index < 0: return
-        # 將原本寫死的函數調用改為指向 self.active_tmpl
         key = self.active_tmpl.get_key_by_index(index)
         template = self.active_tmpl.get_template(key)
         self.analysis_text.setPlainText(template['analysis'])
-        self.recommendation_text.setPlainText(template['recommendation'])    
+        self.recommendation_text.setPlainText(template['recommendation'])
