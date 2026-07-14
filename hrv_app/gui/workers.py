@@ -1,13 +1,15 @@
 from PyQt6.QtCore import QThread, pyqtSignal
-
 from core.tff_reader import read_tff_file
 from core.preprocessing import preprocess_ecg
 from core.hrv_analysis import analyze_hrv
 from core.report_generator import generate_report
-
+from core.edf_reader import read_edf_file
+from core.acq_reader import read_acq_file
+from core.abf_reader import read_abf_file
+import os
 
 class FileLoadWorker(QThread):
-    """Background thread for reading a full TFF file (signal + markers)."""
+    """Background thread for reading TFF, EDF, or ACQ files (signal + markers)."""
     finished = pyqtSignal(dict)
     error = pyqtSignal(str)
 
@@ -17,9 +19,27 @@ class FileLoadWorker(QThread):
 
     def run(self):
         try:
-            file_data = read_tff_file(self.file_path)
+            # 1. 取得副檔名並強制轉成小寫 (例如: '.tff', '.edf', '.acq')
+            ext = os.path.splitext(self.file_path)[1].lower()
+            
+            # 2. 根據副檔名進行分流讀取
+            if ext == '.tff':
+                file_data = read_tff_file(self.file_path)
+            elif ext == '.edf':
+                file_data = read_edf_file(self.file_path)
+            elif ext == '.acq':
+                file_data = read_acq_file(self.file_path)
+            elif ext == '.abf':
+                file_data = read_abf_file(self.file_path)
+            else:
+                # 如果是不支援的格式，主動拋出錯誤
+                raise ValueError(f"不支援的檔案格式: {ext}")
+            
+            # 3. 將統包好的標準字典資料傳回給 GUI 主視窗
             self.finished.emit(file_data)
+            
         except Exception as e:
+            # 捕捉任何讀檔期間發生的錯誤（例如沒安讀檔套件、檔案損壞等）
             self.error.emit(str(e))
 
 

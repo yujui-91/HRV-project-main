@@ -43,7 +43,7 @@ class MainWindow(QMainWindow):
         file_layout.addWidget(QLabel('檔案:'), 0, 0)
         self.file_path_edit = QLineEdit()
         self.file_path_edit.setReadOnly(True)
-        self.file_path_edit.setPlaceholderText('選擇 .TFF 檔案...')
+        self.file_path_edit.setPlaceholderText('選擇訊號檔案 (*.tff, *.edf, *.acq, *.abf)...')
         file_layout.addWidget(self.file_path_edit, 0, 1)
         self.browse_btn = QPushButton('瀏覽')
         file_layout.addWidget(self.browse_btn, 0, 2)
@@ -234,8 +234,9 @@ class MainWindow(QMainWindow):
 
     def _on_browse_file(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, '選擇 TFF 檔案', '',
-            'TFF Files (*.tff *.TFF);;All Files (*)')
+            self, '選擇訊號檔案', '',
+            '選擇訊號檔案 (*.tff *.TFF *.edf *.EDF *.acq *.ACQ *.abf *.ABF);;All Files (*)'
+            )
         if path:
             self.file_path_edit.setText(path)
             self._load_full_file(path)
