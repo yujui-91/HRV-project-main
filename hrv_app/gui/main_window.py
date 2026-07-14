@@ -117,18 +117,19 @@ class MainWindow(QMainWindow):
         manual_layout = QVBoxLayout(manual_page)
         manual_layout.setContentsMargins(0, 0, 0, 0)
 
-        unit_layout = QHBoxLayout()
-        unit_layout.addWidget(QLabel('時間單位:'))
-        self.manual_unit_combo = QComboBox()
-        self.manual_unit_combo.addItems(['分 (Minutes)', '秒 (Seconds)'])
-        unit_layout.addWidget(self.manual_unit_combo)
-        unit_layout.addStretch()
-        manual_layout.addLayout(unit_layout)
+        # 單位統一為秒，已移除手動模式的時間單位下拉選單
 
         manual_grid = QGridLayout()
         manual_grid.addWidget(QLabel(''), 0, 0)
-        manual_grid.addWidget(QLabel('開始時間'), 0, 1)
-        manual_grid.addWidget(QLabel('結束時間'), 0, 2)
+        manual_grid.addWidget(QLabel('開始時間 (秒)'), 0, 1)
+        manual_grid.addWidget(QLabel('結束時間 (秒)'), 0, 2)
+
+        # 設定三個區段的手動輸入秒數預設值
+        defaults = {
+            'baseline': (0.0, 300.0),
+            'stress': (301.0, 660.0),
+            'recovery': (661.0, 1020.0)
+        }
 
         self.manual_inputs = {}
         for row, (phase_key, phase_label) in enumerate([
@@ -140,9 +141,12 @@ class MainWindow(QMainWindow):
             start_spin = QDoubleSpinBox()
             start_spin.setRange(0, 999999)
             start_spin.setDecimals(2)
+            start_spin.setValue(defaults[phase_key][0]) # 設定開始時間預設值
+            
             end_spin = QDoubleSpinBox()
             end_spin.setRange(0, 999999)
             end_spin.setDecimals(2)
+            end_spin.setValue(defaults[phase_key][1]) # 設定結束時間預設值
             
             manual_grid.addWidget(start_spin, row, 1)
             manual_grid.addWidget(end_spin, row, 2)
@@ -389,9 +393,8 @@ class MainWindow(QMainWindow):
             if not self._file_data:
                 return None
             fs = self._file_data.get('fs', 1)
-            unit = self.manual_unit_combo.currentText()
-            multiplier = 60.0 if '分' in unit else 1.0
             
+            # 單位統一為秒，不需再透過 multiplier 換算
             for phase in ['baseline', 'stress', 'recovery']:
                 start_val = self.manual_inputs[phase]['start'].value()
                 end_val = self.manual_inputs[phase]['end'].value()
@@ -400,8 +403,8 @@ class MainWindow(QMainWindow):
                 if start_val == 0.0 and end_val == 0.0:
                     phases[phase] = None
                 else:
-                    start_idx = int(start_val * multiplier * fs)
-                    end_idx = int(end_val * multiplier * fs)
+                    start_idx = int(start_val * fs)
+                    end_idx = int(end_val * fs)
                     phases[phase] = (start_idx, end_idx)
 
         return phases
