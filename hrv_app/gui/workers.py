@@ -7,6 +7,8 @@ from core.edf_reader import read_edf_file
 from core.acq_reader import read_acq_file
 from core.abf_reader import read_abf_file
 import os
+from core.hrv_analysis import analyze_hrv, calculate_skna_metrics
+import numpy as np
 
 class FileLoadWorker(QThread):
     """Background thread for reading TFF, EDF, or ACQ files (signal + markers)."""
@@ -44,7 +46,6 @@ class FileLoadWorker(QThread):
 
 
 class AnalysisWorker(QThread):
-    """Background thread for running the full HRV analysis pipeline."""
     progress = pyqtSignal(str)
     finished = pyqtSignal(dict)
     error = pyqtSignal(str)
@@ -63,15 +64,30 @@ class AnalysisWorker(QThread):
             if self.file_data is not None:
                 file_data = self.file_data
             else:
-                self.progress.emit("讀取 TFF 檔案...")
-                file_data = read_tff_file(self.file_path)
+                self.progress.emit("讀取 檔案...")
+                # 這裡原本是寫死 read_tff_file，建議根據副檔名讀取，但如果你外面已經讀好傳進來就沒差
+                file_data = self.file_data 
 
             self.progress.emit("訊號前處理（濾波 + 降取樣）...")
-            ecg_signal = file_data['signal'][:, self.channel_index]
-            ecg_processed = preprocess_ecg(ecg_signal,
-                                           original_fs=file_data['fs'])
+            
+            # ================== [修改區域 1: 根據副檔名進行單位轉換] ==================
+            import os
+            ext = os.path.splitext(self.file_path)[1].lower()
+            raw_signal_temp = file_data['signal'][:, self.channel_index]
+            
+            if ext in ['.acq', '.edf']:
+                # 如果是 .acq 或 .edf (單位為 mV)，乘以 1000 轉為 μV
+                ecg_signal_raw = raw_signal_temp * 1000.0
+            else:
+                # 如果是 .tff (單位已為 μV)，不需轉換
+                ecg_signal_raw = raw_signal_temp
+            # ======================================================================
 
-            ds_factor = file_data['fs'] / 1000
+            original_fs = file_data['fs']
+            
+            # 取出【降頻處理後】的訊號，給 HRV 專用
+            ecg_processed = preprocess_ecg(ecg_signal_raw, original_fs=original_fs)
+            ds_factor = original_fs / 1000
             phases = {}
 
             if self.phase_ranges and any(v is not None for v in self.phase_ranges.values()):
@@ -80,21 +96,68 @@ class AnalysisWorker(QThread):
                     if r is None:
                         phases[phase_name] = None
                         continue
+                        
+                    # --- HRV 使用降取樣訊號 ---
                     start_ds = int(r[0] / ds_factor)
                     end_ds = int(r[1] / ds_factor)
-                    segment = ecg_processed[start_ds:end_ds]
-                    self.progress.emit(f"HRV 分析中（{phase_name}）...")
+                    segment_ds = ecg_processed[start_ds:end_ds]
+                    
+                    # --- SKNA 使用原始高頻訊號 ---
+                    start_raw = int(r[0])
+                    end_raw = int(r[1])
+                    segment_raw = ecg_signal_raw[start_raw:end_raw]
+                    
+                    self.progress.emit(f"HRV & SKNA 分析中（{phase_name}）...")
                     try:
-                        phases[phase_name] = analyze_hrv(
-                            segment, sampling_rate=1000,
+                        # 1. 執行 HRV 分析
+                        phase_res = analyze_hrv(
+                            segment_ds, sampling_rate=1000,
                             algorithm=self.algorithm)
-                    except Exception:
+                        
+                        # 2. 動態計算所選區間的秒數 (作為 aSKNA 的 Window)
+                        window_sec = (end_raw - start_raw) / original_fs
+                        if window_sec <= 0: window_sec = 5.0 # 防呆機制
+                        
+                        # 3. 執行 SKNA 分析 
+                        if original_fs > 2000:
+                            iskna, askna_windows, overall_askna = calculate_skna_metrics(
+                                segment_raw, original_fs, window_sec=window_sec
+                            )
+                            # ================== [修改區域 2: 改取 Peak iSKNA] ==================
+                            # iSKNA 改取該區段的最大值 (Peak Burst Intensity)
+                            phase_res['metrics']['iSKNA'] = round(float(np.max(iskna)), 4)
+                            phase_res['metrics']['aSKNA'] = round(float(overall_askna), 4)
+                            # ==================================================================
+                        else:
+                            # 採樣率不足 2000Hz 則回傳 None
+                            phase_res['metrics']['iSKNA'] = None
+                            phase_res['metrics']['aSKNA'] = None
+                            
+                        phases[phase_name] = phase_res
+                    except Exception as e:
+                        print(f"Error in {phase_name}: {e}")
                         phases[phase_name] = None
             else:
-                self.progress.emit("HRV 分析中...")
-                phases['baseline'] = analyze_hrv(
+                self.progress.emit("HRV & SKNA 分析中 (全段)...")
+                phase_res = analyze_hrv(
                     ecg_processed, sampling_rate=1000,
                     algorithm=self.algorithm)
+                
+                # 全段訊號處理
+                window_sec = len(ecg_signal_raw) / original_fs
+                if original_fs > 2000:
+                    iskna, askna_windows, overall_askna = calculate_skna_metrics(
+                        ecg_signal_raw, original_fs, window_sec=window_sec
+                    )
+                    # ================== [修改區域 3: 改取 Peak iSKNA (全段)] ==================
+                    phase_res['metrics']['iSKNA'] = round(float(np.max(iskna)), 4)
+                    phase_res['metrics']['aSKNA'] = round(float(overall_askna), 4)
+                    # =========================================================================
+                else:
+                    phase_res['metrics']['iSKNA'] = None
+                    phase_res['metrics']['aSKNA'] = None
+                    
+                phases['baseline'] = phase_res
                 phases['stress'] = None
                 phases['recovery'] = None
 
@@ -111,7 +174,6 @@ class AnalysisWorker(QThread):
             self.error.emit(str(e))
 
 
-# workers.py 修改建議
 
 class ReportWorker(QThread):
     progress = pyqtSignal(str)

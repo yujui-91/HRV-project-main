@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt
 from templates import template_data as tmpl_ch
 from templates import template_data_Eng as tmpl_en
 from gui.workers import AnalysisWorker, FileLoadWorker, ReportWorker
-
+import numpy as np
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -186,7 +186,7 @@ class MainWindow(QMainWindow):
         metrics_layout = QGridLayout()
 
         phases = ['baseline', 'stress', 'recovery']
-        self.display_metrics = ['HR', 'SDNN', 'RMSSD', 'LF', 'HF', 'LF/HF']
+        self.display_metrics = ['HR', 'SDNN', 'RMSSD', 'LF', 'HF', 'LF/HF', 'iSKNA(μV·s)', 'aSKNA(μV)']
 
         metrics_layout.addWidget(QLabel('指標名稱'), 0, 0)
         for i, p_name in enumerate(['Baseline', 'Stress', 'Recovery'], 1):
@@ -450,7 +450,9 @@ class MainWindow(QMainWindow):
             'RMSSD': 'HRV_RMSSD',
             'LF': 'HRV_LF',
             'HF': 'HRV_HF',
-            'LF/HF': 'HRV_LF_HF'
+            'LF/HF': 'HRV_LF_HF',
+            'iSKNA(μV·s)': 'iSKNA',   # 對應 Worker 中定義的 metrics key
+            'aSKNA(μV)': 'aSKNA'    # 對應 Worker 中定義的 metrics key
         }
 
         phases = ['baseline', 'stress', 'recovery']

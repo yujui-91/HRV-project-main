@@ -103,38 +103,35 @@ def _empty_result(r_peaks):
 
 def calculate_skna_metrics(raw_signal, fs, window_sec=5.0):
     """
-    計算皮膚交感神經活性 (SKNA) 的兩個指標：iSKNA 與 aSKNA。
-    依據 Kusayama et al., Nature Protocols 之方法進行實作。
-    
-    參數:
-        raw_signal (np.array): 原始神經訊號陣列 (1D)
-        fs (float): 取樣頻率 (Sampling rate)，建議 >= 2000 Hz
-        window_sec (float): aSKNA 的時間視窗大小 (預設為 5 秒)
-        
-    回傳:
-        iskna (np.array): 連續的 iSKNA 訊號陣列
-        askna_windows (np.array): 每個時間視窗計算出的 aSKNA 陣列
-        overall_askna (float): 整個訊號長度的全局 aSKNA 平均值
+    對標 Nature Protocols (2020) 紙本標準的 SKNA 濾波器：
+    - 通帶：500 Hz - 1000 Hz
+    - 過渡頻寬 (Filter Sharpness)：200 Hz
+    - 採用零相位雙向 IIR 濾波 (等效雙向 60dB 衰減)
+    - 使用 SOS (Second-Order Sections) 確保高採樣率下的數值穩定性
     """
+    """
+    對標 Nature Protocols (2020) 標準的 SKNA 帶通濾波器 (專為 10,000 Hz 取樣率優化)：
+    - 通帶：500 Hz - 1000 Hz
+    - 過渡頻寬 (Filter Sharpness)：200 Hz (阻帶設在 300 Hz 與 1200 Hz)
+    - 採用零相位雙向 IIR 濾波 (等效雙向 60dB 衰減)
+    - 使用 SOS (Second-Order Sections) 確保極高採樣率下的數值計算穩定性
+    """
+    # 1. 核心參數設定 (取樣率固定為 10,000 Hz 時，奈奎斯特頻率為 5,000 Hz)
+    nyq_freq = 0.5 * fs  
     
-    # ---------------------------------------------------------
-    # 步驟 1: 前置處理與帶通濾波 (Band-pass filter)
-    # ---------------------------------------------------------
-    if fs < 2000:
-        print(f"警告: 目前取樣頻率為 {fs} Hz。精確的 SKNA 分析建議取樣頻率應大於或等於 2,000 Hz。")
+    # 通帶：500 - 1000 Hz (歸一化頻率)
+    wp = [500.0 / nyq_freq, 1000.0 / nyq_freq]
+    # 阻帶：300 Hz 以下與 1200 Hz 以上 (兩側過渡帶皆為 200 Hz)
+    ws = [300.0 / nyq_freq, 1200.0 / nyq_freq]
+    
+    # 2. 自動計算符合雙向 60dB 衰減 (單向 30dB) 所需的最小階數 N
+    N, Wn = signal.buttord(wp, ws, gpass=3, gstop=30)
+    
+    # 建立帶通濾波器 (輸出格式指定為 'sos'，防範高階濾波器數值爆炸)
+    sos_filter = signal.butter(N, Wn, btype='band', output='sos')
 
-    # 設定 Butterworth 帶通濾波器 (500 Hz - 1000 Hz)
-    # 奈奎斯特頻率 (Nyquist frequency) 為取樣頻率的一半
-    nyq_freq = 0.5 * fs
-    low_cutoff = 500.0 / nyq_freq
-    high_cutoff = 1000.0 / nyq_freq
-    
-    # 使用 4 階 Butterworth 濾波器
-    b_band, a_band = signal.butter(4, [low_cutoff, high_cutoff], btype='band')
-    #消除心電圖（ECG，主要分布在 0.05–150 Hz）以及肌肉電位（EMG）的低頻干擾
-    
-    # 使用 filtfilt 進行零相位濾波 (Zero-phase filtering)，避免訊號在時間軸上產生偏移
-    filtered_signal = signal.filtfilt(b_band, a_band, raw_signal)
+    # 3. 使用 sosfiltfilt 進行零相位雙向濾波，完美消除時間軸相位偏移
+    filtered_signal = signal.sosfiltfilt(sos_filter, raw_signal)
 
     # ---------------------------------------------------------
     # 步驟 2: 計算 iSKNA (Integrated SKNA)
@@ -143,16 +140,15 @@ def calculate_skna_metrics(raw_signal, fs, window_sec=5.0):
     rectified_signal = np.abs(filtered_signal)
 
     # 2.2 漏電積分器 (Leaky integrator)，時間常數設定為 100-ms (0.1 秒)
-    tau = 0.1  # Time constant = 100 ms
-    
-    # 漏電積分器的數位實現是基於一階 IIR 濾波器。
-    # 衰減係數 alpha 取決於取樣頻率與時間常數： alpha = exp(-dt / tau) = exp(-1 / (fs * tau))
+    tau = 0.1  
     alpha = np.exp(-1.0 / (fs * tau))
     
-    # 差分方程式: y[n] = (1 - alpha) * x[n] + alpha * y[n-1]
-    # 對應的濾波器係數為 b = [1 - alpha], a = [1, -alpha]
-    b_leaky = [1.0 - alpha]
+    # ================== [修改區域 4: 修正積分器增益以對應 LabChart 單位] ==================
+    # 原本是 b_leaky = [1.0 - alpha]，這會讓單位維持在 μV。
+    # 改為 b_leaky = [1.0 / fs]，將訊號對時間積分，輸出單位即為論文要求的 μV·s (微伏-秒)
+    b_leaky = [1.0 / fs]
     a_leaky = [1.0, -alpha]
+    # ====================================================================================
     
     # 進行數位濾波運算得出 iSKNA
     iskna = signal.lfilter(b_leaky, a_leaky, rectified_signal)
