@@ -102,31 +102,16 @@ def _empty_result(r_peaks):
 
 
 def calculate_skna_metrics(raw_signal, fs, window_sec=5.0):
-    """
-    對標 Nature Protocols (2020) 紙本標準的 SKNA 濾波器：
-    - 通帶：500 Hz - 1000 Hz
-    - 過渡頻寬 (Filter Sharpness)：200 Hz
-    - 採用零相位雙向 IIR 濾波 (等效雙向 60dB 衰減)
-    - 使用 SOS (Second-Order Sections) 確保高採樣率下的數值穩定性
-    """
-    """
-    對標 Nature Protocols (2020) 標準的 SKNA 帶通濾波器 (專為 10,000 Hz 取樣率優化)：
-    - 通帶：500 Hz - 1000 Hz
-    - 過渡頻寬 (Filter Sharpness)：200 Hz (阻帶設在 300 Hz 與 1200 Hz)
-    - 採用零相位雙向 IIR 濾波 (等效雙向 60dB 衰減)
-    - 使用 SOS (Second-Order Sections) 確保極高採樣率下的數值計算穩定性
-    """
-    # 1. 核心參數設定 (取樣率固定為 10,000 Hz 時，奈奎斯特頻率為 5,000 Hz)
     nyq_freq = 0.5 * fs  
-    
     # 通帶：500 - 1000 Hz (歸一化頻率)
     wp = [500.0 / nyq_freq, 1000.0 / nyq_freq]
     # 阻帶：300 Hz 以下與 1200 Hz 以上 (兩側過渡帶皆為 200 Hz)
     ws = [300.0 / nyq_freq, 1200.0 / nyq_freq]
     
     # 2. 自動計算符合雙向 60dB 衰減 (單向 30dB) 所需的最小階數 N
-    N, Wn = signal.buttord(wp, ws, gpass=3, gstop=30)
-    
+    N, Wn = signal.buttord(wp, ws, gpass=3, gstop=30) #gpass盡可能(500-1000Hz) 100% 保留 SKNA 神經能量，衰減絕對不能超過 3 dB
+    #N:orders of the filter, Wn: 實際自然截止頻率
+
     # 建立帶通濾波器 (輸出格式指定為 'sos'，防範高階濾波器數值爆炸)
     sos_filter = signal.butter(N, Wn, btype='band', output='sos')
 
@@ -143,9 +128,7 @@ def calculate_skna_metrics(raw_signal, fs, window_sec=5.0):
     tau = 0.1  
     alpha = np.exp(-1.0 / (fs * tau))
     
-    # ================== [修改區域 4: 修正積分器增益以對應 LabChart 單位] ==================
-    # 原本是 b_leaky = [1.0 - alpha]，這會讓單位維持在 μV。
-    # 改為 b_leaky = [1.0 / fs]，將訊號對時間積分，輸出單位即為論文要求的 μV·s (微伏-秒)
+    #b_leaky = [1.0 / fs]，將訊號對時間積分，輸出單位即為論文要求的 μV·s (微伏-秒)
     b_leaky = [1.0 / fs]
     a_leaky = [1.0, -alpha]
     # ====================================================================================
