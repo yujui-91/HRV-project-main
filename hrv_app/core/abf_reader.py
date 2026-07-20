@@ -1,93 +1,104 @@
 """
-Module for reading .abf format files using pyabf.
+Module for reading .abf format files using Neo.
 """
 import datetime
 import numpy as np
-import pyabf
-from scipy import signal as scipy_signal
+import neo
 
-def read_abf_header(file_path, target_fs=10000):
+def read_abf_file(file_path):
     """
-    Read only the header of an ABF file (fast, no signal data).
-    Matches the behavior of read_tff_header[cite: 1].
+    Reads an .abf file using Neo,
+    and returns a standardized dictionary matching the GUI pipeline.
     """
-    # loadData=False 讓 pyabf 只解析標頭，不加載龐大的訊號數據，速度提升數百倍
-    abf = pyabf.ABF(file_path, loadData=False)
+    # 1. 載入 ABF 檔案 (使用 Neo 的 AxonIO)
+    reader = neo.io.AxonIO(filename=file_path)
+    block = reader.read_block()
     
-    n_sig = abf.channelCount
-    sig_names = abf.adcNames
+    # 取得第一個 segment (連續紀錄通常都在 block.segments[0])
+    seg = block.segments[0]
     
-    # 提取日期與時間
-    try:
-        abf_datetime = abf.abfDateTime
-        base_date = abf_datetime.date()
-        base_time = abf_datetime.time()
-    except AttributeError:
-        base_date = datetime.date.today()
-        base_time = datetime.datetime.now().time()
+    # 🛡️ 安全防呆 1：確保檔案內真的有類比訊號，避免後續取 [0] 時崩潰
+    if not seg.analogsignals:
+        raise ValueError(f"No analog signals found in the file: {file_path}")
+    
+    # 初始化收集訊號的容器 (ABF 有時會將不同通道存在不同的 AnalogSignal 物件中)
+    signal_matrices = []
+    sig_names = []
+    
+    # 遍歷提取類比訊號 (AnalogSignal)
+    for anasig in seg.analogsignals:
+        # 🌟 核心修改：利用 Neo 內建的物理單位轉換，強制轉為微伏 (uV)
+        try:
+            # 如果是電壓單位 (V, mV 等)，這行會自動換算正確倍率
+            # 例如 1 V 會自動變成 1,000,000 uV，1 mV 會變成 1,000 uV
+            anasig_uV = anasig.rescale('uV').magnitude
+            signal_matrices.append(np.array(anasig_uV))
+        except ValueError:
+            # 防呆機制：如果遇到非電壓單位的通道 (例如電流 pA, 或自訂的無單位通道)
+            # 就直接取原始數值，不進行轉換
+            signal_matrices.append(np.array(anasig.magnitude))
+            print(f"Warning: Channel unit '{anasig.units}' cannot be converted to uV. Keeping original values.")
         
-    return {
-        'fs': target_fs,        # 配合系統底層邏輯，統一回傳目標採樣率
-        'n_sig': n_sig,
-        'sig_name': sig_names,
-        'base_time': base_time,
-        'base_date': base_date,
-    }
-
-def read_abf_file(file_path, target_fs=10000):
-    """
-    Reads an .abf file, resamples all channels to 10000Hz, 
-    and returns a standardized dictionary.
-    """
-    abf = pyabf.ABF(file_path)
-    
-    fs_orig = abf.dataRate
-    n_sig = abf.channelCount
-    sig_names = abf.adcNames
-    
-    # abf.data 原始形狀為 [channel, sample]
-    sig_matrix_orig = abf.data
-    
-    resampled_signals = []
-    
-    # 針對所有通道進行重採樣一致性處理
-    for i in range(n_sig):
-        sig_orig = sig_matrix_orig[i, :]
-        
-        if fs_orig != target_fs and fs_orig > 0:
-            num_target_samples = int(len(sig_orig) * (target_fs / fs_orig))
-            sig_resampled = scipy_signal.resample(sig_orig, num_target_samples)
+        # 獲取通道名稱 (與原本相同)
+        names = anasig.array_annotations.get('channel_names')
+        if names is not None:
+            sig_names.extend([n.decode('utf-8') if isinstance(n, bytes) else str(n) for n in names])
         else:
-            sig_resampled = sig_orig
-            
-        resampled_signals.append(sig_resampled)
-        
-    # 對齊長度，避免傅立葉重採樣產生的點數浮點誤差
-    min_len = min(len(sig) for sig in resampled_signals)
-    signal_matrix = np.column_stack([sig[:min_len] for sig in resampled_signals])
-    
-    # 提取日期與時間
+            sig_names.extend([f"Ch{len(sig_names) + i + 1}" for i in range(anasig.shape[1])])
+
+    # 水平合併所有的通道矩陣 => 確保形狀為 (samples, channels)
+    # 🛡️ 安全防呆 2：捕捉因不同通道取樣點長度不一致而導致的合併失敗
     try:
-        abf_datetime = abf.abfDateTime
-        base_date = abf_datetime.date()
-        base_time = abf_datetime.time()
-    except AttributeError:
+        signal_matrix = np.hstack(signal_matrices) if signal_matrices else np.array([])
+    except ValueError as e:
+        raise ValueError("All channels must have the same length (number of samples) to be stacked.") from e
+        
+    n_sig = signal_matrix.shape[1] if signal_matrix.ndim > 1 else 0
+    
+    # 獲取取樣率 (從第一個類比訊號物件中提取)
+    fs = float(seg.analogsignals[0].sampling_rate.rescale('Hz').magnitude)
+    
+    # 2. 獲取測量起始時間
+    meas_datetime = block.rec_datetime
+    if meas_datetime is not None:
+        base_date = meas_datetime.date()
+        base_time = meas_datetime.time()
+    else:
         base_date = datetime.date.today()
         base_time = datetime.datetime.now().time()
         
-    # 提取標記 (Markers)
+    # 3. 💡 核心改進：抓取事件時間並轉為 Index
     markers = []
-    if hasattr(abf, 'tagTimesMin') and len(abf.tagTimesMin) > 0:
-        # tagTimesMin 單位為分鐘，需轉換為秒，再依據 target_fs 換算成 Sample Index
-        markers = [int(t_min * 60 * target_fs) for t_min in abf.tagTimesMin]
+    triggers = []
+    
+    # 遍歷所有的事件標記 (Events)
+    for ev in seg.events:
+        # 取得事件的秒數 (確保單位轉換為秒)
+        times_sec = ev.times.rescale('s').magnitude
+        labels = ev.labels
         
+        for t, desc in zip(times_sec, labels):
+            # 處理部分標籤為 bytes 的情況
+            desc_str = desc.decode('utf-8') if isinstance(desc, bytes) else str(desc)
+            
+            # 手動將秒數精準轉換為數據點 Index (時間 * 取樣率)
+            sample_index = int(np.round(t * fs))
+            
+            # 🎯 關鍵修正：不論是什麼事件，一律塞進 markers 確保 GUI 100% 讀到並繪製！
+            markers.append(sample_index)
+            
+            # 備份分流：如果符合 Trigger 特徵，才額外塞進 triggers 提供後續分析
+            desc_upper = desc_str.upper()
+            if any(k in desc_upper for k in ['STIM', 'TRIG', 'S ', 'USER TYPE']):
+                triggers.append(sample_index)
+
     return {
         'signal': signal_matrix,
-        'fs': target_fs,
+        'fs': fs,
         'n_sig': n_sig,
         'sig_name': sig_names,
         'base_time': base_time,
         'base_date': base_date,
-        'markers': np.array(markers, dtype='int'),
-        'triggers': np.array([], dtype='int')  # 保持空陣列，確保對接架構不報錯
+        'markers': np.array(markers, dtype='int'),      # 100% 的事件都在這，GUI 絕對能讀取與顯示
+        'triggers': np.array(triggers, dtype='int')     # 特定的實驗 Trigger 在這備用（相容分析模組）
     }

@@ -76,11 +76,14 @@ class AnalysisWorker(QThread):
             raw_signal_temp = file_data['signal'][:, self.channel_index]
             
             if ext in ['.acq', '.edf']:
-                # 如果是 .acq 或 .edf (單位為 mV)，乘以 1000 轉為 μV
+                # 如果是 .acq 或 .edf (假設讀取原始單位皆為 mV)，乘以 1000 轉為 μV
                 ecg_signal_raw = raw_signal_temp * 1000.0
+            elif ext in ['.tff', '.abf']:
+                    # 如果是 .tff，或是已經在讀檔底層(Neo)轉換完畢的 .abf
+                    ecg_signal_raw = raw_signal_temp
             else:
-                # 如果是 .tff (單位已為 μV)，不需轉換
-                ecg_signal_raw = raw_signal_temp
+                    # 預設行為 (可依您的需求設定)
+                    ecg_signal_raw = raw_signal_temp
             # ======================================================================
 
             original_fs = file_data['fs']
