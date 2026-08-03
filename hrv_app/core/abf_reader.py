@@ -27,17 +27,8 @@ def read_abf_file(file_path):
     
     # 遍歷提取類比訊號 (AnalogSignal)
     for anasig in seg.analogsignals:
-        # 🌟 核心修改：利用 Neo 內建的物理單位轉換，強制轉為微伏 (uV)
-        try:
-            # 如果是電壓單位 (V, mV 等)，這行會自動換算正確倍率
-            # 例如 1 V 會自動變成 1,000,000 uV，1 mV 會變成 1,000 uV
-            anasig_uV = anasig.rescale('uV').magnitude
-            signal_matrices.append(np.array(anasig_uV))
-        except ValueError:
-            # 防呆機制：如果遇到非電壓單位的通道 (例如電流 pA, 或自訂的無單位通道)
-            # 就直接取原始數值，不進行轉換
-            signal_matrices.append(np.array(anasig.magnitude))
-            print(f"Warning: Channel unit '{anasig.units}' cannot be converted to uV. Keeping original values.")
+        # 預設 .abf 標註的單位不可信
+        signal_matrices.append(np.asarray(anasig.magnitude, dtype=float))
         
         # 獲取通道名稱 (與原本相同)
         names = anasig.array_annotations.get('channel_names')

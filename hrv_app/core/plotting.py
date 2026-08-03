@@ -77,15 +77,12 @@ def create_taichi_plot(lf_hf_ratio, lf_nu=None, hf_nu=None, add_legend=True,
                    edgecolors='black', linewidth=1)
         ax.text(legend_x + 0.20, -0.3, par_label, fontsize=legend_fs, va='center')
 
-    if lf_nu is not None and hf_nu is not None:
-        info_text = (f'LF/HF ratio = {lf_hf_ratio:.3f}\n'
-                     f'LFnu = {lf_nu:.1f}%\nHFnu = {hf_nu:.1f}%')
-    else:
-        sym_pct_label = 'Sympathetic' if lang == 'en' else '交感'
-        par_pct_label = 'Parasympathetic' if lang == 'en' else '副交感'
-        info_text = (f'LF/HF ratio = {lf_hf_ratio:.3f}\n'
-                     f'{sym_pct_label}: {sympathetic_ratio*100:.1f}%\n'
-                     f'{par_pct_label}: {parasympathetic_ratio*100:.1f}%')
+    # LF/HF 正規化百分比：正常用頻譜算出的精確 pLF/pHF；
+    # 若分析未產出（None），才退而用 LF/HF ratio 幾何反推 LF/(LF+HF)、HF/(LF+HF)。
+    lf_pct = lf_nu if lf_nu is not None else sympathetic_ratio * 100
+    hf_pct = hf_nu if hf_nu is not None else parasympathetic_ratio * 100
+    info_text = (f'LF/HF ratio = {lf_hf_ratio:.3f}\n'
+                 f'LF = {lf_pct:.1f}%\nHF = {hf_pct:.1f}%')
 
     ax.text(0, -1.4, info_text, ha='center', va='top', fontsize=11,
             linespacing=2.0,

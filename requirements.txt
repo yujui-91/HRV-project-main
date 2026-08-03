@@ -9,6 +9,14 @@ matplotlib==3.10.8
 pandas==2.3.3
 PyQt6==6.10.2
 
+# Signal-file readers used by the hrv_app GUI:
+#   mne     -> .edf reader + hrv_analysis
+#   neo     -> .abf reader
+#   bioread -> .acq reader + hrv_analysis
+mne==1.12.1
+neo==0.14.5
+bioread==2025.5.2
+
 # Only used by code under legacy/ (not the hrv_app GUI), but declared in pyproject:
 neurokit2==0.2.13
 wfdb==4.3.1

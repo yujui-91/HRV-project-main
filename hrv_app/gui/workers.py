@@ -1,10 +1,13 @@
 from PyQt6.QtCore import QThread, pyqtSignal
-
 from hrv_app.core.tff_reader import read_tff_file
 from hrv_app.core.preprocessing import preprocess_ecg
 from hrv_app.core.hrv_analysis import analyze_hrv
 from hrv_app.core.report_generator import generate_report
-
+from hrv_app.core.edf_reader import read_edf_file
+from hrv_app.core.acq_reader import read_acq_file
+from hrv_app.core.abf_reader import read_abf_file
+from hrv_app.core.hrv_analysis import analyze_hrv, calculate_skna_metrics
+import os
 
 class FileLoadWorker(QThread):
     """Background thread for reading TFF, EDF, or ACQ files (signal + markers)."""
@@ -66,20 +69,20 @@ class AnalysisWorker(QThread):
 
             self.progress.emit("訊號前處理（濾波 + 降取樣）...")
             
-            # ================== [修改區域 1: 根據副檔名進行單位轉換] ==================
+            # ============ 各檔案格式：數值單位 與 通道定義 對照表 ============
+            # aSKNA 須以 μV 計算，各格式單位在此都會先換算成 μV。
+            #
+            #  格式 | 讀取套件           | 預設單位                 | → μV  | 通道定義（依資料集）
+            #  ---- | ------------------ | ------------------------ | ----- | -------------------------------
+            #  .acq | bioread            | mV                       | ×1000 | ch0=呼吸綁帶、ch1=胸腔貼片(ECG)
+            #  .edf | MNE                | mV，但MNE 讀取時會轉成 V | ×1e6  | ch0=呼吸綁帶、ch1=胸腔貼片(ECG)
+            #  .abf | neo AxonIO         | μV                       | ×1    | ch0=胸腔貼片(ECG)、ch1=頸部貼片(ECG)
+            #  .tff | 自製ME6000讀取套件 | μV                       | ×1    | ch0=胸腔貼片(ECG)、ch1=頸部貼片(ECG)
             import os
             ext = os.path.splitext(self.file_path)[1].lower()
             raw_signal_temp = file_data['signal'][:, self.channel_index]
-            
-            if ext in ['.acq', '.edf']:
-                # 如果是 .acq 或 .edf (假設讀取原始單位皆為 mV)，乘以 1000 轉為 μV
-                ecg_signal_raw = raw_signal_temp * 1000.0
-            elif ext in ['.tff', '.abf']:
-                    # 如果是 .tff，或是已經在讀檔底層(Neo)轉換完畢的 .abf
-                    ecg_signal_raw = raw_signal_temp
-            else:
-                    # 預設行為 (可依您的需求設定)
-                    ecg_signal_raw = raw_signal_temp
+            _TO_UV = {'.acq': 1000.0, '.abf': 1.0, '.edf': 1_000_000.0, '.tff': 1.0}
+            ecg_signal_raw = raw_signal_temp * _TO_UV.get(ext, 1.0)
             # ======================================================================
 
             original_fs = file_data['fs']
@@ -119,17 +122,13 @@ class AnalysisWorker(QThread):
                         
                         # 3. 執行 SKNA 分析 
                         if original_fs > 2000:
-                            iskna, askna_windows, overall_askna = calculate_skna_metrics(
+                            # aSKNA = 整流後帶通訊號的平均絕對電壓 (μV)
+                            _, _, overall_askna = calculate_skna_metrics(
                                 segment_raw, original_fs, window_sec=window_sec
                             )
-                            # ================== [修改區域 2: 改取 Peak iSKNA] ==================
-                            # iSKNA 改取該區段的最大值 (Peak Burst Intensity)
-                            phase_res['metrics']['iSKNA'] = round(float(np.max(iskna)), 4)
                             phase_res['metrics']['aSKNA'] = round(float(overall_askna), 4)
-                            # ==================================================================
                         else:
-                            # 採樣率不足 2000Hz 則回傳 None
-                            phase_res['metrics']['iSKNA'] = None
+                            # 採樣率不足 2000Hz 則不計算
                             phase_res['metrics']['aSKNA'] = None
                             
                         phases[phase_name] = phase_res
@@ -145,15 +144,12 @@ class AnalysisWorker(QThread):
                 # 全段訊號處理
                 window_sec = len(ecg_signal_raw) / original_fs
                 if original_fs > 2000:
-                    iskna, askna_windows, overall_askna = calculate_skna_metrics(
+                    # aSKNA (全段) = 整流後帶通訊號的平均絕對電壓 (μV)
+                    _, _, overall_askna = calculate_skna_metrics(
                         ecg_signal_raw, original_fs, window_sec=window_sec
                     )
-                    # ================== [修改區域 3: 改取 Peak iSKNA (全段)] ==================
-                    phase_res['metrics']['iSKNA'] = round(float(np.max(iskna)), 4)
                     phase_res['metrics']['aSKNA'] = round(float(overall_askna), 4)
-                    # =========================================================================
                 else:
-                    phase_res['metrics']['iSKNA'] = None
                     phase_res['metrics']['aSKNA'] = None
                     
                 phases['baseline'] = phase_res

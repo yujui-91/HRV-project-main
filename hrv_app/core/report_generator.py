@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import FancyBboxPatch
+from matplotlib.lines import Line2D
 
-from .plotting import create_taichi_plot
+from hrv_app.core.plotting import create_taichi_plot
 
 
 def _setup_chinese_font():
@@ -118,6 +119,9 @@ def generate_report(output_path, patient_info, hrv_results,
         ['LF/HF', _phase_metric(hrv_results, 'baseline', 'HRV_LF_HF'),
                    _phase_metric(hrv_results, 'stress', 'HRV_LF_HF'),
                    _phase_metric(hrv_results, 'recovery', 'HRV_LF_HF')],
+        ['aSKNA', _phase_metric(hrv_results, 'baseline', 'aSKNA'),
+                      _phase_metric(hrv_results, 'stress', 'aSKNA'),
+                      _phase_metric(hrv_results, 'recovery', 'aSKNA')],
     ]
 
 
@@ -154,6 +158,17 @@ def generate_report(output_path, patient_info, hrv_results,
             
         # 調整單元格高度
         cell.set_height(0.15)
+
+        # 調整欄寬：指標標題欄較寬，各階段數值欄較窄 (四欄總和 = 1.0)
+        cell.set_width(0.34 if col == 0 else 0.22)
+
+    # 於 HRV 指標 (上) 與 SKNA 指標 (下) 之間加一條較粗的分隔線
+    n_rows = len(table_data)
+    y_div = 1.0 / n_rows  # 底部一列 (aSKNA) 屬 SKNA 指標
+    ax_metrics.add_line(Line2D([0, 1], [y_div, y_div],
+                               transform=ax_metrics.transAxes,
+                               color='#595959', linewidth=2.5,
+                               clip_on=False, zorder=5))
 
 
     # === Row 3: 底部區塊 (分析與建議) ===
