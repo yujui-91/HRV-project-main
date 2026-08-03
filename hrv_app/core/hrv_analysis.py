@@ -1,8 +1,7 @@
 import numpy as np
-from core import vollmer_hrv as vh
-import scipy.signal as signal
-import bioread  # 處理 .acq
-import mne
+from hrv_app.core import vollmer_hrv as vh
+
+
 
 def analyze_hrv(ecg_signal, sampling_rate=1000, algorithm='vollmer'):
     """

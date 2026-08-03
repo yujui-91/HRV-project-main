@@ -6,10 +6,10 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from templates import template_data as tmpl_ch
-from templates import template_data_Eng as tmpl_en
-from gui.workers import AnalysisWorker, FileLoadWorker, ReportWorker
-import numpy as np
+from hrv_app.templates import template_data as tmpl_ch
+from hrv_app.templates import template_data_Eng as tmpl_en
+from hrv_app.gui.workers import AnalysisWorker, FileLoadWorker, ReportWorker
+
 
 class MainWindow(QMainWindow):
     def __init__(self):

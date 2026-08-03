@@ -1,14 +1,10 @@
 from PyQt6.QtCore import QThread, pyqtSignal
-from core.tff_reader import read_tff_file
-from core.preprocessing import preprocess_ecg
-from core.hrv_analysis import analyze_hrv
-from core.report_generator import generate_report
-from core.edf_reader import read_edf_file
-from core.acq_reader import read_acq_file
-from core.abf_reader import read_abf_file
-import os
-from core.hrv_analysis import analyze_hrv, calculate_skna_metrics
-import numpy as np
+
+from hrv_app.core.tff_reader import read_tff_file
+from hrv_app.core.preprocessing import preprocess_ecg
+from hrv_app.core.hrv_analysis import analyze_hrv
+from hrv_app.core.report_generator import generate_report
+
 
 class FileLoadWorker(QThread):
     """Background thread for reading TFF, EDF, or ACQ files (signal + markers)."""
@@ -199,9 +195,9 @@ class ReportWorker(QThread):
             
             # 根據語言決定使用的導入
             if self.lang == 'English':
-                from ..core.report_generator_Eng import generate_report
+                from hrv_app.core.report_generator_Eng import generate_report
             else:
-                from ..core.report_generator import generate_report
+                from hrv_app.core.report_generator import generate_report
             
             generate_report(
                 self.output_path,
