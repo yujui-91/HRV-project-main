@@ -121,9 +121,12 @@ def generate_report(output_path, patient_info, hrv_results,
         ['LF/HF', _phase_metric(hrv_results, 'baseline', 'HRV_LF_HF'),
                    _phase_metric(hrv_results, 'stress', 'HRV_LF_HF'),
                    _phase_metric(hrv_results, 'recovery', 'HRV_LF_HF')],
-        ['aSKNA', _phase_metric(hrv_results, 'baseline', 'aSKNA'),
-                      _phase_metric(hrv_results, 'stress', 'aSKNA'),
-                      _phase_metric(hrv_results, 'recovery', 'aSKNA')],
+        ['aSKNA(ch1, uv)', _phase_metric(hrv_results, 'baseline', 'aSKNA_ch1'),
+                           _phase_metric(hrv_results, 'stress', 'aSKNA_ch1'),
+                           _phase_metric(hrv_results, 'recovery', 'aSKNA_ch1')],
+        ['aSKNA(ch2, uv)', _phase_metric(hrv_results, 'baseline', 'aSKNA_ch2'),
+                           _phase_metric(hrv_results, 'stress', 'aSKNA_ch2'),
+                           _phase_metric(hrv_results, 'recovery', 'aSKNA_ch2')],
     ]
 
 
@@ -166,7 +169,7 @@ def generate_report(output_path, patient_info, hrv_results,
 
     # 於 HRV 指標 (上) 與 SKNA 指標 (下) 之間加一條較粗的分隔線
     n_rows = len(table_data)
-    y_div = 1.0 / n_rows  # 底部一列 (aSKNA) 屬 SKNA 指標
+    y_div = 2.0 / n_rows  # 底部兩列 (aSKNA ch1/ch2) 屬 SKNA 指標
     ax_metrics.add_line(Line2D([0, 1], [y_div, y_div],
                                transform=ax_metrics.transAxes,
                                color='#595959', linewidth=2.5,

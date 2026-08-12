@@ -48,18 +48,13 @@ class MainWindow(QMainWindow):
         self.browse_btn = QPushButton('瀏覽')
         file_layout.addWidget(self.browse_btn, 0, 2)
 
-        file_layout.addWidget(QLabel('通道:'), 1, 0)
-        self.channel_combo = QComboBox()
-        self.channel_combo.setEnabled(False)
-        file_layout.addWidget(self.channel_combo, 1, 1)
+        file_layout.addWidget(QLabel('演算法:'), 1, 0)
+        self.algorithm_combo = QComboBox()
+        self.algorithm_combo.addItems(['Vollmer', 'RRI (5-Method)'])
+        file_layout.addWidget(self.algorithm_combo, 1, 1)
         self.analyze_btn = QPushButton('分析')
         self.analyze_btn.setEnabled(False)
         file_layout.addWidget(self.analyze_btn, 1, 2)
-
-        file_layout.addWidget(QLabel('演算法:'), 2, 0)
-        self.algorithm_combo = QComboBox()
-        self.algorithm_combo.addItems(['Vollmer', 'RRI (5-Method)'])
-        file_layout.addWidget(self.algorithm_combo, 2, 1)
 
         file_group.setLayout(file_layout)
         left_layout.addWidget(file_group)
@@ -186,7 +181,8 @@ class MainWindow(QMainWindow):
         metrics_layout = QGridLayout()
 
         phases = ['baseline', 'stress', 'recovery']
-        self.display_metrics = ['HR', 'SDNN', 'RMSSD', 'LF', 'HF', 'LF/HF', 'aSKNA']
+        self.display_metrics = ['HR', 'SDNN', 'RMSSD', 'LF', 'HF', 'LF/HF',
+                                'aSKNA(ch1)', 'aSKNA(ch2)']
 
         metrics_layout.addWidget(QLabel('指標名稱'), 0, 0)
         for i, p_name in enumerate(['Baseline', 'Stress', 'Recovery'], 1):
@@ -315,13 +311,7 @@ class MainWindow(QMainWindow):
         self._file_data = file_data
         self.progress_bar.setVisible(False)
 
-        self.channel_combo.clear()
         n_channels = file_data.get('n_sig', 0)
-        sig_names = file_data.get('sig_name', [])
-        for i in range(n_channels):
-            name = sig_names[i] if i < len(sig_names) else f'Channel {i}'
-            self.channel_combo.addItem(f'{i}: {name}')
-        self.channel_combo.setEnabled(True)
         self.analyze_btn.setEnabled(True)
 
         base_date = file_data.get('base_date', '')
@@ -424,14 +414,13 @@ class MainWindow(QMainWindow):
                         f'{phase} 的起始時間/標記必須在結束時間/標記之前')
                     return
 
-        channel_idx = self.channel_combo.currentIndex()
         self.analyze_btn.setEnabled(False)
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setVisible(True)
 
         algorithm = 'vollmer' if self.algorithm_combo.currentIndex() == 0 else 'rri'
         self.worker = AnalysisWorker(
-            path, channel_idx,
+            path,
             file_data=self._file_data,
             phase_ranges=phase_ranges,
             algorithm=algorithm)
@@ -451,7 +440,8 @@ class MainWindow(QMainWindow):
             'LF': 'HRV_LF',
             'HF': 'HRV_HF',
             'LF/HF': 'HRV_LF_HF',
-            'aSKNA': 'aSKNA'
+            'aSKNA(ch1)': 'aSKNA_ch1',
+            'aSKNA(ch2)': 'aSKNA_ch2'
         }
 
         phases = ['baseline', 'stress', 'recovery']
